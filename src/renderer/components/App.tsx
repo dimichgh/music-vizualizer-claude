@@ -1,0 +1,199 @@
+import React, { useState, useRef, useEffect } from 'react';
+import AudioControls from './AudioControls';
+import Visualizer from './Visualizer';
+import { AudioData, VisualizationType } from '../../shared/types';
+
+const App: React.FC = () => {
+  const [audioData, setAudioData] = useState<AudioData | null>(null);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [visualizationType, setVisualizationType] = useState<VisualizationType>(
+    VisualizationType.COSMIC
+  );
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const analyserNodeRef = useRef<AnalyserNode | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const pauseTimeRef = useRef<number>(0);
+  const animationFrameRef = useRef<number | null>(null);
+
+  const handleFileOpen = async () => {
+    try {
+      // Stop any existing playback
+      handleStop();
+      
+      const result = await window.electron.audioFileApi.openWavFile();
+      
+      if (result.canceled || !result.buffer || !result.filePath) {
+        return;
+      }
+      
+      // Create audio context
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      
+      // Create analyser node
+      const analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 2048;
+      analyserNode.smoothingTimeConstant = 0.8;
+      analyserNode.connect(audioContext.destination);
+      analyserNodeRef.current = analyserNode;
+      
+      // Decode audio data
+      const audioBuffer = await audioContext.decodeAudioData(result.buffer);
+      
+      setAudioData({
+        buffer: audioBuffer,
+        filePath: result.filePath,
+        fileName: result.fileName || 'Unknown',
+      });
+      
+      setIsPlaying(false);
+      setIsPaused(false);
+      setCurrentTime(0);
+      pauseTimeRef.current = 0;
+    } catch (error) {
+      console.error('Error opening audio file:', error);
+    }
+  };
+
+  // Update current time while playing
+  useEffect(() => {
+    const updateCurrentTime = () => {
+      if (isPlaying && audioContextRef.current) {
+        setCurrentTime(audioContextRef.current.currentTime - startTimeRef.current);
+        animationFrameRef.current = requestAnimationFrame(updateCurrentTime);
+      }
+    };
+    
+    if (isPlaying) {
+      animationFrameRef.current = requestAnimationFrame(updateCurrentTime);
+    } else if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [isPlaying]);
+  
+  const handlePlayPause = () => {
+    if (!audioData || !audioContextRef.current || !analyserNodeRef.current) return;
+    
+    if (isPlaying) {
+      // Pause playback
+      if (sourceNodeRef.current) {
+        const elapsedTime = audioContextRef.current.currentTime - startTimeRef.current;
+        pauseTimeRef.current = elapsedTime;
+        sourceNodeRef.current.stop();
+        sourceNodeRef.current.disconnect();
+        sourceNodeRef.current = null;
+      }
+      setIsPlaying(false);
+      setIsPaused(true);
+    } else {
+      // Start or resume playback
+      const sourceNode = audioContextRef.current.createBufferSource();
+      sourceNode.buffer = audioData.buffer;
+      sourceNode.connect(analyserNodeRef.current);
+      
+      if (isPaused) {
+        // Resume from pause position
+        sourceNode.start(0, pauseTimeRef.current);
+        startTimeRef.current = audioContextRef.current.currentTime - pauseTimeRef.current;
+      } else {
+        // Start from beginning or specified position
+        sourceNode.start(0, currentTime);
+        startTimeRef.current = audioContextRef.current.currentTime - currentTime;
+      }
+      
+      sourceNodeRef.current = sourceNode;
+      setIsPlaying(true);
+      setIsPaused(false);
+      
+      // Handle playback end
+      sourceNode.onended = () => {
+        if (sourceNodeRef.current === sourceNode) { // Only if this is still the active source
+          setIsPlaying(false);
+          setIsPaused(false);
+          setCurrentTime(0);
+          pauseTimeRef.current = 0;
+        }
+      };
+    }
+  };
+  
+  const handleStop = () => {
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.stop();
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+    
+    setIsPlaying(false);
+    setIsPaused(false);
+    setCurrentTime(0);
+    pauseTimeRef.current = 0;
+  };
+  
+  const handleSeek = (time: number) => {
+    if (!audioData) return;
+    
+    const wasPlaying = isPlaying;
+    
+    // Stop current playback
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.stop();
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
+    }
+    
+    // Update time
+    setCurrentTime(time);
+    pauseTimeRef.current = time;
+    
+    // Resume playback if it was playing
+    if (wasPlaying) {
+      handlePlayPause();
+    }
+  };
+  
+  const handleVisualizationChange = (type: VisualizationType) => {
+    setVisualizationType(type);
+  };
+
+  return (
+    <div className="app-container">
+      <div className="visualizer-container">
+        <Visualizer 
+          audioData={audioData} 
+          isPlaying={isPlaying}
+          visualizationType={visualizationType}
+          audioContextRef={audioContextRef}
+          sourceNodeRef={sourceNodeRef}
+          analyserNodeRef={analyserNodeRef} 
+        />
+      </div>
+      <div className="controls-container">
+        <AudioControls 
+          audioData={audioData}
+          isPlaying={isPlaying}
+          onPlayPause={handlePlayPause}
+          onStop={handleStop}
+          currentTime={currentTime}
+          onSeek={handleSeek}
+          onFileOpen={handleFileOpen}
+          visualizationType={visualizationType}
+          onVisualizationChange={handleVisualizationChange}
+        />
+      </div>
+    </div>
+  );
+};
+
+export default App;

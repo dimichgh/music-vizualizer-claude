@@ -1,0 +1,119 @@
+const { FusesPlugin } = require('@electron-forge/plugin-fuses');
+const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const path = require('path');
+
+module.exports = {
+  packagerConfig: {
+    asar: true,
+  },
+  rebuildConfig: {},
+  makers: [
+    {
+      name: '@electron-forge/maker-squirrel',
+      config: {},
+    },
+    {
+      name: '@electron-forge/maker-zip',
+      platforms: ['darwin'],
+    },
+    {
+      name: '@electron-forge/maker-deb',
+      config: {},
+    },
+    {
+      name: '@electron-forge/maker-rpm',
+      config: {},
+    },
+  ],
+  plugins: [
+    {
+      name: '@electron-forge/plugin-auto-unpack-natives',
+      config: {},
+    },
+    // Fuses are used to enable/disable various Electron functionality
+    // at package time, before code signing the application
+    new FusesPlugin({
+      version: FuseVersion.V1,
+      [FuseV1Options.RunAsNode]: false,
+      [FuseV1Options.EnableCookieEncryption]: true,
+      [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+      [FuseV1Options.EnableNodeCliInspectArguments]: false,
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+    }),
+    {
+      name: '@electron-forge/plugin-webpack',
+      config: {
+        mainConfig: {
+          entry: './src/main/main.ts',
+          // Configuration object for the main process
+          module: {
+            rules: [
+              {
+                test: /\.tsx?$/,
+                use: {
+                  loader: 'babel-loader',
+                  options: {
+                    presets: [
+                      '@babel/preset-env',
+                      '@babel/preset-typescript'
+                    ]
+                  }
+                },
+                exclude: /node_modules/,
+              },
+            ],
+          },
+          resolve: {
+            extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
+          },
+        },
+        renderer: {
+          config: {
+            module: {
+              rules: [
+                {
+                  test: /\.tsx?$/,
+                  use: {
+                    loader: 'babel-loader',
+                    options: {
+                      presets: [
+                        '@babel/preset-env',
+                        '@babel/preset-react',
+                        '@babel/preset-typescript'
+                      ]
+                    }
+                  },
+                  exclude: /node_modules/,
+                },
+                {
+                  test: /\.css$/,
+                  use: ['style-loader', 'css-loader'],
+                },
+                {
+                  test: /\.(png|svg|jpg|jpeg|gif|wav|mp3)$/i,
+                  type: 'asset/resource',
+                },
+              ],
+            },
+            resolve: {
+              extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
+            },
+          },
+          entryPoints: [
+            {
+              html: './src/renderer/index.html',
+              js: './src/renderer/index.tsx',
+              name: 'main_window',
+              preload: {
+                js: './src/main/preload.ts',
+              },
+              nodeIntegration: false,
+              contextIsolation: true,
+            },
+          ],
+        },
+      },
+    },
+  ],
+};
