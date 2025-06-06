@@ -7,6 +7,7 @@ interface AudioControlsProps {
   onPlayPause: () => void;
   onStop: () => void;
   onFileOpen: () => void;
+  onMediaOpen: () => void;
   currentTime: number;
   onSeek: (time: number) => void;
   visualizationType: VisualizationType;
@@ -19,6 +20,7 @@ const AudioControls: React.FC<AudioControlsProps> = ({
   onPlayPause,
   onStop,
   onFileOpen,
+  onMediaOpen,
   currentTime,
   onSeek,
   visualizationType,
@@ -40,6 +42,10 @@ const AudioControls: React.FC<AudioControlsProps> = ({
       <div className="playback-controls">
         <button onClick={onFileOpen}>
           Open WAV File
+        </button>
+        
+        <button onClick={onMediaOpen}>
+          Open Media Files
         </button>
         
         <button 
@@ -82,6 +88,7 @@ const AudioControls: React.FC<AudioControlsProps> = ({
           <option value={VisualizationType.COSMIC}>Cosmic</option>
           <option value={VisualizationType.PSYCHEDELIC}>Psychedelic</option>
           <option value={VisualizationType.SUNBURST}>Sunburst</option>
+          <option value={VisualizationType.RECTANGULAR}>Rectangular</option>
         </select>
       </div>
     </>

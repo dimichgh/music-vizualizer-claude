@@ -11,6 +11,8 @@ const App: React.FC = () => {
   const [visualizationType, setVisualizationType] = useState<VisualizationType>(
     VisualizationType.COSMIC
   );
+  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const analyserNodeRef = useRef<AnalyserNode | null>(null);
@@ -55,6 +57,27 @@ const App: React.FC = () => {
       pauseTimeRef.current = 0;
     } catch (error) {
       console.error('Error opening audio file:', error);
+    }
+  };
+
+  const handleMediaOpen = async () => {
+    try {
+      const result = await window.electron.mediaApi.openMediaFiles();
+      
+      if (result.canceled || !result.mediaFiles || result.mediaFiles.length === 0) {
+        return;
+      }
+      
+      // Extract URLs from the media files
+      const urls = result.mediaFiles.map(file => file.url);
+      setMediaUrls(urls);
+      
+      // Auto-switch to rectangular visualization if media files are loaded
+      if (urls.length > 0 && visualizationType !== VisualizationType.RECTANGULAR) {
+        setVisualizationType(VisualizationType.RECTANGULAR);
+      }
+    } catch (error) {
+      console.error('Error opening media files:', error);
     }
   };
 
@@ -176,7 +199,8 @@ const App: React.FC = () => {
           visualizationType={visualizationType}
           audioContextRef={audioContextRef}
           sourceNodeRef={sourceNodeRef}
-          analyserNodeRef={analyserNodeRef} 
+          analyserNodeRef={analyserNodeRef}
+          mediaUrls={mediaUrls}
         />
       </div>
       <div className="controls-container">
@@ -188,6 +212,7 @@ const App: React.FC = () => {
           currentTime={currentTime}
           onSeek={handleSeek}
           onFileOpen={handleFileOpen}
+          onMediaOpen={handleMediaOpen}
           visualizationType={visualizationType}
           onVisualizationChange={handleVisualizationChange}
         />
