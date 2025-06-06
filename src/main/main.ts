@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as isDev from 'electron-is-dev';
@@ -15,6 +15,20 @@ if (require('electron-squirrel-startup')) {
 
 let mainWindow: BrowserWindow | null = null;
 
+// Create custom protocol
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-file',
+    privileges: {
+      standard: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      secure: true,
+      bypassCSP: true,
+    },
+  },
+]);
+
 const createWindow = (): void => {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -23,6 +37,7 @@ const createWindow = (): void => {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: true,
     },
   });
 
@@ -38,6 +53,19 @@ const createWindow = (): void => {
     mainWindow = null;
   });
 };
+
+// Register protocol for serving local files securely
+app.whenReady().then(() => {
+  protocol.registerFileProtocol('local-file', (request, callback) => {
+    const url = request.url.replace('local-file://', '');
+    try {
+      return callback(decodeURI(url));
+    } catch (error) {
+      console.error(error);
+      return callback('404');
+    }
+  });
+});
 
 app.on('ready', createWindow);
 
@@ -81,6 +109,43 @@ ipcMain.handle('open-wav-file', async () => {
     };
   } catch (error) {
     console.error('Error reading WAV file:', error);
+    return { canceled: true, error: (error as Error).message };
+  }
+});
+
+// File handling - Open Media files (images/videos)
+ipcMain.handle('open-media-files', async () => {
+  if (!mainWindow) return { canceled: true };
+  
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Media', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'ogg'] }
+    ],
+  });
+  
+  if (canceled || filePaths.length === 0) {
+    return { canceled: true };
+  }
+  
+  try {
+    // Process each file
+    const mediaFiles = filePaths.map(filePath => {
+      // Use our custom protocol for secure local file access
+      return {
+        filePath,
+        fileName: path.basename(filePath),
+        url: `local-file://${filePath}` // Use custom protocol instead of file://
+      };
+    });
+    
+    // Return media files details
+    return {
+      canceled: false,
+      mediaFiles
+    };
+  } catch (error) {
+    console.error('Error processing media files:', error);
     return { canceled: true, error: (error as Error).message };
   }
 });

@@ -8,4 +8,9 @@ contextBridge.exposeInMainWorld('electron', {
       return await ipcRenderer.invoke('open-wav-file');
     },
   },
+  mediaApi: {
+    openMediaFiles: async () => {
+      return await ipcRenderer.invoke('open-media-files');
+    },
+  },
 });

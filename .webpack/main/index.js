@@ -1091,6 +1091,19 @@ if (__webpack_require__(/*! electron-squirrel-startup */ "./node_modules/electro
     electron__WEBPACK_IMPORTED_MODULE_0__.app.quit();
 }
 let mainWindow = null;
+// Create custom protocol
+electron__WEBPACK_IMPORTED_MODULE_0__.protocol.registerSchemesAsPrivileged([
+    {
+        scheme: 'local-file',
+        privileges: {
+            standard: true,
+            supportFetchAPI: true,
+            corsEnabled: true,
+            secure: true,
+            bypassCSP: true,
+        },
+    },
+]);
 const createWindow = () => {
     mainWindow = new electron__WEBPACK_IMPORTED_MODULE_0__.BrowserWindow({
         width: 1200,
@@ -1099,6 +1112,7 @@ const createWindow = () => {
             preload: '/Users/dsemenov/Views/claude-code-visualizer/.webpack/renderer/main_window/preload.js',
             contextIsolation: true,
             nodeIntegration: false,
+            webSecurity: true,
         },
     });
     const startUrl = 'http://localhost:3000/main_window/index.html';
@@ -1110,6 +1124,19 @@ const createWindow = () => {
         mainWindow = null;
     });
 };
+// Register protocol for serving local files securely
+electron__WEBPACK_IMPORTED_MODULE_0__.app.whenReady().then(() => {
+    electron__WEBPACK_IMPORTED_MODULE_0__.protocol.registerFileProtocol('local-file', (request, callback) => {
+        const url = request.url.replace('local-file://', '');
+        try {
+            return callback(decodeURI(url));
+        }
+        catch (error) {
+            console.error(error);
+            return callback('404');
+        }
+    });
+});
 electron__WEBPACK_IMPORTED_MODULE_0__.app.on('ready', createWindow);
 electron__WEBPACK_IMPORTED_MODULE_0__.app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
@@ -1146,6 +1173,40 @@ electron__WEBPACK_IMPORTED_MODULE_0__.ipcMain.handle('open-wav-file', async () =
     }
     catch (error) {
         console.error('Error reading WAV file:', error);
+        return { canceled: true, error: error.message };
+    }
+});
+// File handling - Open Media files (images/videos)
+electron__WEBPACK_IMPORTED_MODULE_0__.ipcMain.handle('open-media-files', async () => {
+    if (!mainWindow)
+        return { canceled: true };
+    const { canceled, filePaths } = await electron__WEBPACK_IMPORTED_MODULE_0__.dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+            { name: 'Media', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'ogg'] }
+        ],
+    });
+    if (canceled || filePaths.length === 0) {
+        return { canceled: true };
+    }
+    try {
+        // Process each file
+        const mediaFiles = filePaths.map(filePath => {
+            // Use our custom protocol for secure local file access
+            return {
+                filePath,
+                fileName: path__WEBPACK_IMPORTED_MODULE_1__.basename(filePath),
+                url: `local-file://${filePath}` // Use custom protocol instead of file://
+            };
+        });
+        // Return media files details
+        return {
+            canceled: false,
+            mediaFiles
+        };
+    }
+    catch (error) {
+        console.error('Error processing media files:', error);
         return { canceled: true, error: error.message };
     }
 });

@@ -3,6 +3,9 @@ export interface ElectronAPI {
   audioFileApi: {
     openWavFile: () => Promise<OpenWavFileResult>;
   };
+  mediaApi: {
+    openMediaFiles: () => Promise<OpenMediaFilesResult>;
+  };
 }
 
 export interface OpenWavFileResult {
@@ -11,6 +14,18 @@ export interface OpenWavFileResult {
   fileName?: string;
   buffer?: ArrayBuffer;
   error?: string;
+}
+
+export interface OpenMediaFilesResult {
+  canceled: boolean;
+  mediaFiles?: MediaFile[];
+  error?: string;
+}
+
+export interface MediaFile {
+  filePath: string;
+  fileName: string;
+  url: string;
 }
 
 // Audio types
@@ -38,6 +53,7 @@ export enum VisualizationType {
   COSMIC = 'cosmic',
   PSYCHEDELIC = 'psychedelic',
   SUNBURST = 'sunburst',
+  RECTANGULAR = 'rectangular',
 }
 
 export interface VisualizationConfig {
