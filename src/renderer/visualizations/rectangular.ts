@@ -14,14 +14,15 @@ interface SpectrumRay {
   frequency: number;
   height: number;
   color: string;
+  speed: number; // Speed multiplier for more varied motion
 }
 
 class RectangularVisualization extends BaseVisualization {
-  private centerRectWidth: number = 400;
-  private centerRectHeight: number = 300;
+  private centerRectWidth: number = 0; // Will be set dynamically based on canvas size
+  private centerRectHeight: number = 0; // Will be set dynamically based on canvas size
   private centerPulse: number = 0;
   private time: number = 0;
-  private reactivityLevel: number = 0.8;
+  private reactivityLevel: number = 1.0; // Increased reactivity
   private dominantInstrument: string | null = null;
   private colorTransitionSpeed: number = 0.01;
   private currentHue: number = 0;
@@ -30,7 +31,7 @@ class RectangularVisualization extends BaseVisualization {
   private lastMediaChangeTime: number = 0;
   private mediaDuration: number = 5000; // Time in ms to show each media item
   private spectrumRays: SpectrumRay[] = [];
-  private rayCount: number = 200; // Number of spectrum rays around the rectangle
+  private rayCount: number = 300; // Even more rays for better coverage
   
   // Color mapping for different instruments (same as sunburst)
   private instrumentColors: Record<string, number> = {
@@ -60,12 +61,14 @@ class RectangularVisualization extends BaseVisualization {
     for (let i = 0; i < this.rayCount; i++) {
       const angle = (i / this.rayCount) * Math.PI * 2;
       const frequency = Math.floor((i / this.rayCount) * 128); // Map each ray to a frequency bin
+      const speed = 0.8 + Math.random() * 0.4; // Random speed multiplier between 0.8 and 1.2
       
       this.spectrumRays.push({
         angle,
         frequency,
         height: 0,
-        color: `hsl(${(i / this.rayCount) * 360}, 100%, 50%)`
+        color: `hsl(${(i / this.rayCount) * 360}, 100%, 50%)`,
+        speed
       });
     }
   }
@@ -173,9 +176,26 @@ class RectangularVisualization extends BaseVisualization {
   }
   
   private initDefaults(): void {
-    // Default initial state
-    this.centerRectWidth = Math.min(this.width * 0.7, 400);
-    this.centerRectHeight = this.centerRectWidth * 0.75; // 4:3 aspect ratio
+    // Calculate rectangle size based on canvas dimensions
+    this.updateRectangleSize();
+  }
+  
+  private updateRectangleSize(): void {
+    // Make the rectangle smaller to allow more space for rays and effects
+    // Width is 55% of canvas width, up to a maximum of 55% of the canvas height with a 16:9 aspect ratio
+    const maxWidth = this.width * 0.55;
+    const maxHeight = this.height * 0.55;
+    
+    // Calculate dimensions while preserving a 16:9 aspect ratio
+    if (maxWidth / 16 * 9 <= maxHeight) {
+      // Width constrained
+      this.centerRectWidth = maxWidth;
+      this.centerRectHeight = maxWidth / 16 * 9;
+    } else {
+      // Height constrained
+      this.centerRectHeight = maxHeight;
+      this.centerRectWidth = maxHeight / 9 * 16;
+    }
   }
   
   public draw(analysisData: AudioAnalysisData): void {
@@ -214,7 +234,7 @@ class RectangularVisualization extends BaseVisualization {
     
     // Update center pulse based on bass frequencies (lower end of spectrum)
     const bassEnergy = this.getBassEnergy(analysisData.frequencyData);
-    this.centerPulse = this.centerPulse * 0.7 + bassEnergy * 0.3;
+    this.centerPulse = this.centerPulse * 0.5 + bassEnergy * 0.5; // More responsive pulse
     
     // Update spectrum rays
     this.updateSpectrumRays(analysisData.frequencyData);
@@ -263,30 +283,24 @@ class RectangularVisualization extends BaseVisualization {
   }
   
   private updateSpectrumRays(frequencyData: Uint8Array): void {
-    const centerX = this.width / 2;
-    const centerY = this.height / 2;
-    
-    // Calculate rectangle dimensions
-    const rectWidth = this.centerRectWidth * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
-    const rectHeight = this.centerRectHeight * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
-    
     // Update each ray
     for (let i = 0; i < this.spectrumRays.length; i++) {
       const ray = this.spectrumRays[i];
       
-      // Get frequency data for this ray
-      const freqValue = frequencyData[ray.frequency] / 255;
+      // Get frequency data for this ray with more emphasis on peaks
+      const freqIndex = ray.frequency;
+      const freqValue = Math.pow(frequencyData[freqIndex] / 255, 1.2); // Emphasize higher values
       
-      // Calculate max ray height based on canvas dimensions
-      const maxRayHeight = Math.min(this.width, this.height) * 0.3;
+      // Calculate max ray height based on canvas dimensions - shorter rays
+      const maxRayHeight = Math.min(this.width, this.height) * 0.15;
       
-      // Update ray height with some smoothing
-      ray.height = ray.height * 0.7 + (freqValue * maxRayHeight) * 0.3;
+      // Update ray height with less smoothing for more dynamic response
+      ray.height = ray.height * 0.4 + (freqValue * maxRayHeight * ray.speed) * 0.6;
       
-      // Update ray color
-      const hue = (ray.frequency / 128) * 270; // 0-270 degree hue range (red to violet)
-      const saturation = 80 + (ray.frequency / 128) * 20;
-      const lightness = 40 + freqValue * 40;
+      // Update ray color based on position (full gradient around the rectangle)
+      const hue = (i / this.spectrumRays.length) * 360; // Full color spectrum
+      const saturation = 90 + freqValue * 10; // Higher saturation
+      const lightness = 50 + freqValue * 30; // Brighter colors
       
       ray.color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
     }
@@ -296,7 +310,7 @@ class RectangularVisualization extends BaseVisualization {
     const centerX = this.width / 2;
     const centerY = this.height / 2;
     
-    // Calculate rectangle dimensions
+    // Calculate rectangle dimensions with pulsing effect
     const rectWidth = this.centerRectWidth * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
     const rectHeight = this.centerRectHeight * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
     
@@ -316,67 +330,83 @@ class RectangularVisualization extends BaseVisualization {
       let startY = centerY;
       
       // Find the intersection point of the ray with the rectangle
-      if (angle >= 0 && angle < Math.PI / 2) {
-        // Top-right quadrant
-        const xIntersectRight = right;
-        const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
-        
-        const yIntersectTop = top;
-        const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
-        
-        if (yIntersectRight >= top && yIntersectRight <= bottom) {
-          startX = right;
-          startY = yIntersectRight;
+      try {
+        if (angle >= 0 && angle < Math.PI / 2) {
+          // Top-right quadrant
+          const xIntersectRight = right;
+          const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
+          
+          const yIntersectTop = top;
+          const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
+          
+          if (yIntersectRight >= top && yIntersectRight <= bottom) {
+            startX = right;
+            startY = yIntersectRight;
+          } else if (xIntersectTop >= left && xIntersectTop <= right) {
+            startX = xIntersectTop;
+            startY = top;
+          }
+        } else if (angle >= Math.PI / 2 && angle < Math.PI) {
+          // Top-left quadrant
+          const xIntersectLeft = left;
+          const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
+          
+          const yIntersectTop = top;
+          const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
+          
+          if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
+            startX = left;
+            startY = yIntersectLeft;
+          } else if (xIntersectTop >= left && xIntersectTop <= right) {
+            startX = xIntersectTop;
+            startY = top;
+          }
+        } else if (angle >= Math.PI && angle < 3 * Math.PI / 2) {
+          // Bottom-left quadrant
+          const xIntersectLeft = left;
+          const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
+          
+          const yIntersectBottom = bottom;
+          const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
+          
+          if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
+            startX = left;
+            startY = yIntersectLeft;
+          } else if (xIntersectBottom >= left && xIntersectBottom <= right) {
+            startX = xIntersectBottom;
+            startY = bottom;
+          }
         } else {
-          startX = xIntersectTop;
-          startY = top;
+          // Bottom-right quadrant
+          const xIntersectRight = right;
+          const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
+          
+          const yIntersectBottom = bottom;
+          const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
+          
+          if (yIntersectRight >= top && yIntersectRight <= bottom) {
+            startX = right;
+            startY = yIntersectRight;
+          } else if (xIntersectBottom >= left && xIntersectBottom <= right) {
+            startX = xIntersectBottom;
+            startY = bottom;
+          }
         }
-      } else if (angle >= Math.PI / 2 && angle < Math.PI) {
-        // Top-left quadrant
-        const xIntersectLeft = left;
-        const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
-        
-        const yIntersectTop = top;
-        const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
-        
-        if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
-          startX = left;
-          startY = yIntersectLeft;
-        } else {
-          startX = xIntersectTop;
-          startY = top;
-        }
-      } else if (angle >= Math.PI && angle < 3 * Math.PI / 2) {
-        // Bottom-left quadrant
-        const xIntersectLeft = left;
-        const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
-        
-        const yIntersectBottom = bottom;
-        const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
-        
-        if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
-          startX = left;
-          startY = yIntersectLeft;
-        } else {
-          startX = xIntersectBottom;
-          startY = bottom;
-        }
-      } else {
-        // Bottom-right quadrant
-        const xIntersectRight = right;
-        const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
-        
-        const yIntersectBottom = bottom;
-        const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
-        
-        if (yIntersectRight >= top && yIntersectRight <= bottom) {
-          startX = right;
-          startY = yIntersectRight;
-        } else {
-          startX = xIntersectBottom;
-          startY = bottom;
+      } catch (e) {
+        // Handle any edge cases (like division by zero)
+        // Special case for vertical and horizontal angles
+        if (angle === 0 || angle === Math.PI) {
+          startX = angle === 0 ? right : left;
+          startY = centerY;
+        } else if (angle === Math.PI / 2 || angle === 3 * Math.PI / 2) {
+          startX = centerX;
+          startY = angle === Math.PI / 2 ? top : bottom;
         }
       }
+      
+      // Handle division by zero cases for vertical and horizontal rays
+      if (!isFinite(startX) || isNaN(startX)) startX = centerX;
+      if (!isFinite(startY) || isNaN(startY)) startY = centerY;
       
       // Calculate end points
       const endX = startX + Math.cos(angle) * ray.height;
@@ -392,12 +422,17 @@ class RectangularVisualization extends BaseVisualization {
       const hueMatch = baseColor.match(/hsl\((\d+)/);
       const hue = hueMatch ? parseInt(hueMatch[1]) : 0;
       
-      gradient.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.7)`);
-      gradient.addColorStop(1, `hsla(${hue}, 100%, 50%, 0)`);
+      // Brighter gradient colors
+      gradient.addColorStop(0, `hsla(${hue}, 100%, 80%, 0.85)`);
+      gradient.addColorStop(1, `hsla(${hue}, 100%, 60%, 0)`);
       
-      // Draw ray
+      // Draw ray with glow effect
+      this.ctx.save();
+      this.ctx.shadowBlur = 8; // More pronounced glow
+      this.ctx.shadowColor = `hsla(${hue}, 100%, 70%, 0.5)`;
+      
       this.ctx.strokeStyle = gradient;
-      this.ctx.lineWidth = 2;
+      this.ctx.lineWidth = 1.5 + Math.random(); // Slightly thinner lines but still varied
       this.ctx.lineCap = 'round';
       
       this.ctx.beginPath();
@@ -405,15 +440,7 @@ class RectangularVisualization extends BaseVisualization {
       this.ctx.lineTo(endX, endY);
       this.ctx.stroke();
       
-      // Draw a smaller, brighter core
-      this.ctx.strokeStyle = baseColor;
-      this.ctx.lineWidth = 1;
-      
-      this.ctx.beginPath();
-      this.ctx.moveTo(startX, startY);
-      this.ctx.lineTo(startX + Math.cos(angle) * ray.height * 0.7, 
-                      startY + Math.sin(angle) * ray.height * 0.7);
-      this.ctx.stroke();
+      this.ctx.restore();
     }
   }
   
@@ -492,19 +519,22 @@ class RectangularVisualization extends BaseVisualization {
     const x = centerX - rectWidth / 2;
     const y = centerY - rectHeight / 2;
     
-    // Draw glow effect
-    const glowSize = 20 * (1 + intensity * this.reactivityLevel);
+    // Draw glow effect with brighter colors
+    const glowSize = 25 * (1 + intensity * this.reactivityLevel); // Larger glow
     const glowColor = this.dominantInstrument 
-      ? `hsla(${this.currentHue}, 100%, 50%, ${0.3 + intensity * 0.3})`
-      : `hsla(40, 100%, 50%, ${0.3 + intensity * 0.3})`;
+      ? `hsla(${this.currentHue}, 100%, 60%, ${0.4 + intensity * 0.4})` // Brighter glow
+      : `hsla(40, 100%, 60%, ${0.4 + intensity * 0.4})`;
     
     this.ctx.shadowBlur = glowSize;
     this.ctx.shadowColor = glowColor;
     
-    // Draw the rectangle frame
-    this.ctx.strokeStyle = glowColor.replace('hsla', 'hsl').replace(/, [0-9.]+\)/, ', 1)');
-    this.ctx.lineWidth = 3 + intensity * 5;
-    this.ctx.strokeRect(x, y, rectWidth, rectHeight);
+    // Draw the rectangle frame with multiple layers for extra glow
+    for (let i = 0; i < 3; i++) {
+      const layerOpacity = 0.8 - i * 0.2; // Higher opacity
+      this.ctx.strokeStyle = glowColor.replace('hsla', 'hsl').replace(/, [0-9.]+\)/, `, ${layerOpacity})`);
+      this.ctx.lineWidth = (3 + intensity * 5) - i;
+      this.ctx.strokeRect(x, y, rectWidth, rectHeight);
+    }
     
     // Reset shadow for content
     this.ctx.shadowBlur = 0;
@@ -558,6 +588,54 @@ class RectangularVisualization extends BaseVisualization {
       this.ctx.textBaseline = 'middle';
       this.ctx.fillText(this.mediaItems.length > 0 ? 'Loading media...' : 'No media loaded', centerX, centerY);
     }
+    
+    // Draw corner accent effects with brighter colors
+    this.drawCornerAccents(x, y, rectWidth, rectHeight, intensity);
+  }
+  
+  private drawCornerAccents(x: number, y: number, width: number, height: number, intensity: number): void {
+    const cornerSize = 35 * (1 + intensity * 0.5); // Slightly larger corners
+    
+    // Set up style for corner accents with brighter colors
+    this.ctx.strokeStyle = this.dominantInstrument 
+      ? `hsla(${this.currentHue}, 100%, 80%, ${0.6 + intensity * 0.4})` // Brighter
+      : `hsla(40, 100%, 80%, ${0.6 + intensity * 0.4})`;
+    this.ctx.lineWidth = 2 + intensity * 3;
+    
+    // Draw with glow effect
+    this.ctx.shadowBlur = 8;
+    this.ctx.shadowColor = this.ctx.strokeStyle;
+    
+    // Top-left corner
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y + cornerSize);
+    this.ctx.lineTo(x, y);
+    this.ctx.lineTo(x + cornerSize, y);
+    this.ctx.stroke();
+    
+    // Top-right corner
+    this.ctx.beginPath();
+    this.ctx.moveTo(x + width - cornerSize, y);
+    this.ctx.lineTo(x + width, y);
+    this.ctx.lineTo(x + width, y + cornerSize);
+    this.ctx.stroke();
+    
+    // Bottom-right corner
+    this.ctx.beginPath();
+    this.ctx.moveTo(x + width, y + height - cornerSize);
+    this.ctx.lineTo(x + width, y + height);
+    this.ctx.lineTo(x + width - cornerSize, y + height);
+    this.ctx.stroke();
+    
+    // Bottom-left corner
+    this.ctx.beginPath();
+    this.ctx.moveTo(x + cornerSize, y + height);
+    this.ctx.lineTo(x, y + height);
+    this.ctx.lineTo(x, y + height - cornerSize);
+    this.ctx.stroke();
+    
+    // Reset shadow
+    this.ctx.shadowBlur = 0;
   }
   
   private drawBeatPulse(intensity: number): void {
@@ -569,11 +647,11 @@ class RectangularVisualization extends BaseVisualization {
     const baseHeight = this.centerRectHeight * (1 + this.centerPulse * 0.5);
     
     // Create multiple concentric rectangles for beat pulses
-    const pulseCount = 3;
+    const pulseCount = 5; // Increased pulse count
     
     for (let i = 0; i < pulseCount; i++) {
       // Each pulse has different size and color
-      const sizeOffset = i * 0.3;
+      const sizeOffset = i * 0.2; // Reduced spacing between pulses
       const pulseWidth = baseWidth * (1 + sizeOffset + intensity);
       const pulseHeight = baseHeight * (1 + sizeOffset + intensity);
       
@@ -581,22 +659,27 @@ class RectangularVisualization extends BaseVisualization {
       const x = centerX - pulseWidth / 2;
       const y = centerY - pulseHeight / 2;
       
-      // Different hue for each pulse
+      // Different hue for each pulse - brighter colors
       const hue = (i * 30 + this.currentHue) % 360;
       
-      // Fade opacity based on pulse index
-      const opacity = (1 - i / pulseCount) * intensity * 0.5;
+      // Fade opacity based on pulse index but higher overall opacity
+      const opacity = (1 - i / pulseCount) * intensity * 0.7;
       
-      this.ctx.strokeStyle = `hsla(${hue}, 100%, 70%, ${opacity})`;
-      this.ctx.lineWidth = (10 - i * 2) * intensity;
+      this.ctx.strokeStyle = `hsla(${hue}, 100%, 75%, ${opacity})`;
+      this.ctx.lineWidth = (8 - i * 1.5) * intensity;
+      
+      this.ctx.shadowBlur = 5;
+      this.ctx.shadowColor = `hsla(${hue}, 100%, 60%, ${opacity * 0.7})`;
       
       this.ctx.beginPath();
       this.ctx.rect(x, y, pulseWidth, pulseHeight);
       this.ctx.stroke();
     }
     
+    this.ctx.shadowBlur = 0;
+    
     // Add flash effect on beat
-    const flashOpacity = intensity * 0.15;
+    const flashOpacity = intensity * 0.2; // Stronger flash
     this.ctx.fillStyle = `rgba(255, 255, 255, ${flashOpacity})`;
     this.ctx.fillRect(0, 0, this.width, this.height);
   }
@@ -606,8 +689,7 @@ class RectangularVisualization extends BaseVisualization {
     super.resizeCanvas();
     
     // Update center rect size based on new canvas dimensions
-    this.centerRectWidth = Math.min(this.width * 0.7, 400);
-    this.centerRectHeight = this.centerRectWidth * 0.75; // 4:3 aspect ratio
+    this.updateRectangleSize();
   }
   
   // Clean up any resources
