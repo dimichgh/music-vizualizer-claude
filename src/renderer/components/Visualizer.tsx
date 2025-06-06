@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, MutableRefObject } from 'react';
 import { AudioData, VisualizationType, AudioAnalysisData } from '../../shared/types';
+import SunburstVisualization from '../visualizations/sunburst';
 import { FFT_SIZE, SMOOTHING_TIME_CONSTANT } from '../../shared/constants';
 
 interface VisualizerProps {
@@ -22,6 +23,7 @@ const Visualizer: React.FC<VisualizerProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // We now receive these refs from props instead of creating them here
   const rafIdRef = useRef<number | null>(null);
+  const sunburstRef = useRef<SunburstVisualization | null>(null);
   
   const [analysisData, setAnalysisData] = useState<AudioAnalysisData | null>(null);
 
@@ -114,6 +116,9 @@ const Visualizer: React.FC<VisualizerProps> = ({
         case VisualizationType.PSYCHEDELIC:
           drawPsychedelic(ctx, canvas, frequencyData, timeDomainData, averageFrequency);
           break;
+        case VisualizationType.SUNBURST:
+          drawSunburst(ctx, canvas, frequencyData, timeDomainData, averageFrequency, analysisData ? analysisData.instrumentPrediction : null);
+          break;
         default:
           drawSpectrum(ctx, canvas, frequencyData);
       }
@@ -128,6 +133,16 @@ const Visualizer: React.FC<VisualizerProps> = ({
       rafIdRef.current = null;
     }
   };
+
+  // Cleanup function for the useEffect hook
+  useEffect(() => {
+    return () => {
+      // Clean up sunburst visualization if it exists
+      if (sunburstRef.current) {
+        sunburstRef.current = null;
+      }
+    };
+  }, []);
 
   // Basic visualization renderers
   const drawSpectrum = (
@@ -337,6 +352,34 @@ const Visualizer: React.FC<VisualizerProps> = ({
       }
     }
   };
+  
+  const drawSunburst = (
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    frequencyData: Uint8Array,
+    timeDomainData: Uint8Array,
+    averageFrequency: number,
+    instrumentPrediction: string | null
+  ) => {
+    // Create a persistent SunburstVisualization instance or reuse existing one
+    if (!sunburstRef.current) {
+      sunburstRef.current = new SunburstVisualization(canvas);
+    }
+    
+    // Create a properly formed analysis data object
+    const sunburstAnalysisData: AudioAnalysisData = {
+      frequencyData,
+      waveformData: new Uint8Array(frequencyData.length), // Placeholder with correct size
+      timeDomainData,
+      averageFrequency,
+      peaks: analysisData?.peaks || [], // Use actual peaks if available
+      bpm: analysisData?.bpm || null,
+      instrumentPrediction
+    };
+    
+    // Use the persistent sunburst visualization to draw
+    sunburstRef.current.draw(sunburstAnalysisData);
+  };
 
   return (
     <canvas
@@ -345,5 +388,6 @@ const Visualizer: React.FC<VisualizerProps> = ({
     />
   );
 };
+
 
 export default Visualizer;

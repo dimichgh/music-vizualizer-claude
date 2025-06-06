@@ -37,6 +37,7 @@ export enum VisualizationType {
   PARTICLES = 'particles',
   COSMIC = 'cosmic',
   PSYCHEDELIC = 'psychedelic',
+  SUNBURST = 'sunburst',
 }
 
 export interface VisualizationConfig {
