@@ -81,6 +81,7 @@ const AudioControls: React.FC<AudioControlsProps> = ({
           <option value={VisualizationType.PARTICLES}>Particles</option>
           <option value={VisualizationType.COSMIC}>Cosmic</option>
           <option value={VisualizationType.PSYCHEDELIC}>Psychedelic</option>
+          <option value={VisualizationType.SUNBURST}>Sunburst</option>
         </select>
       </div>
     </>

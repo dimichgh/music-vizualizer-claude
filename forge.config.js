@@ -51,15 +51,7 @@ module.exports = {
             rules: [
               {
                 test: /\.tsx?$/,
-                use: {
-                  loader: 'babel-loader',
-                  options: {
-                    presets: [
-                      '@babel/preset-env',
-                      '@babel/preset-typescript'
-                    ]
-                  }
-                },
+                use: 'ts-loader',
                 exclude: /node_modules/,
               },
             ],
@@ -74,16 +66,7 @@ module.exports = {
               rules: [
                 {
                   test: /\.tsx?$/,
-                  use: {
-                    loader: 'babel-loader',
-                    options: {
-                      presets: [
-                        '@babel/preset-env',
-                        '@babel/preset-react',
-                        '@babel/preset-typescript'
-                      ]
-                    }
-                  },
+                  use: 'ts-loader',
                   exclude: /node_modules/,
                 },
                 {
