@@ -9,6 +9,13 @@ interface MediaItem {
   element: HTMLImageElement | HTMLVideoElement;
 }
 
+interface SpectrumRay {
+  angle: number;
+  frequency: number;
+  height: number;
+  color: string;
+}
+
 class RectangularVisualization extends BaseVisualization {
   private centerRectWidth: number = 400;
   private centerRectHeight: number = 300;
@@ -22,6 +29,8 @@ class RectangularVisualization extends BaseVisualization {
   private currentMediaIndex: number = 0;
   private lastMediaChangeTime: number = 0;
   private mediaDuration: number = 5000; // Time in ms to show each media item
+  private spectrumRays: SpectrumRay[] = [];
+  private rayCount: number = 200; // Number of spectrum rays around the rectangle
   
   // Color mapping for different instruments (same as sunburst)
   private instrumentColors: Record<string, number> = {
@@ -42,6 +51,23 @@ class RectangularVisualization extends BaseVisualization {
     super(canvas);
     this.colorScheme = DEFAULT_COLOR_SCHEMES.COSMIC;
     this.initDefaults();
+    this.initSpectrumRays();
+  }
+  
+  private initSpectrumRays(): void {
+    this.spectrumRays = [];
+    
+    for (let i = 0; i < this.rayCount; i++) {
+      const angle = (i / this.rayCount) * Math.PI * 2;
+      const frequency = Math.floor((i / this.rayCount) * 128); // Map each ray to a frequency bin
+      
+      this.spectrumRays.push({
+        angle,
+        frequency,
+        height: 0,
+        color: `hsl(${(i / this.rayCount) * 360}, 100%, 50%)`
+      });
+    }
   }
   
   public setMediaItems(items: string[]): void {
@@ -190,6 +216,12 @@ class RectangularVisualization extends BaseVisualization {
     const bassEnergy = this.getBassEnergy(analysisData.frequencyData);
     this.centerPulse = this.centerPulse * 0.7 + bassEnergy * 0.3;
     
+    // Update spectrum rays
+    this.updateSpectrumRays(analysisData.frequencyData);
+    
+    // Draw spectrum rays
+    this.drawSpectrumRays();
+    
     // Draw center rectangle with media
     this.drawCenterRect(intensity);
     
@@ -227,6 +259,161 @@ class RectangularVisualization extends BaseVisualization {
       }
       
       this.lastMediaChangeTime = currentTime;
+    }
+  }
+  
+  private updateSpectrumRays(frequencyData: Uint8Array): void {
+    const centerX = this.width / 2;
+    const centerY = this.height / 2;
+    
+    // Calculate rectangle dimensions
+    const rectWidth = this.centerRectWidth * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
+    const rectHeight = this.centerRectHeight * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
+    
+    // Update each ray
+    for (let i = 0; i < this.spectrumRays.length; i++) {
+      const ray = this.spectrumRays[i];
+      
+      // Get frequency data for this ray
+      const freqValue = frequencyData[ray.frequency] / 255;
+      
+      // Calculate max ray height based on canvas dimensions
+      const maxRayHeight = Math.min(this.width, this.height) * 0.3;
+      
+      // Update ray height with some smoothing
+      ray.height = ray.height * 0.7 + (freqValue * maxRayHeight) * 0.3;
+      
+      // Update ray color
+      const hue = (ray.frequency / 128) * 270; // 0-270 degree hue range (red to violet)
+      const saturation = 80 + (ray.frequency / 128) * 20;
+      const lightness = 40 + freqValue * 40;
+      
+      ray.color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
+  }
+  
+  private drawSpectrumRays(): void {
+    const centerX = this.width / 2;
+    const centerY = this.height / 2;
+    
+    // Calculate rectangle dimensions
+    const rectWidth = this.centerRectWidth * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
+    const rectHeight = this.centerRectHeight * (1 + this.centerPulse * 0.5 * this.reactivityLevel);
+    
+    // Calculate rectangle corners
+    const left = centerX - rectWidth / 2;
+    const right = centerX + rectWidth / 2;
+    const top = centerY - rectHeight / 2;
+    const bottom = centerY + rectHeight / 2;
+    
+    // Draw rays
+    for (let i = 0; i < this.spectrumRays.length; i++) {
+      const ray = this.spectrumRays[i];
+      const angle = ray.angle;
+      
+      // Determine which side of the rectangle this ray originates from
+      let startX = centerX;
+      let startY = centerY;
+      
+      // Find the intersection point of the ray with the rectangle
+      if (angle >= 0 && angle < Math.PI / 2) {
+        // Top-right quadrant
+        const xIntersectRight = right;
+        const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
+        
+        const yIntersectTop = top;
+        const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
+        
+        if (yIntersectRight >= top && yIntersectRight <= bottom) {
+          startX = right;
+          startY = yIntersectRight;
+        } else {
+          startX = xIntersectTop;
+          startY = top;
+        }
+      } else if (angle >= Math.PI / 2 && angle < Math.PI) {
+        // Top-left quadrant
+        const xIntersectLeft = left;
+        const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
+        
+        const yIntersectTop = top;
+        const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
+        
+        if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
+          startX = left;
+          startY = yIntersectLeft;
+        } else {
+          startX = xIntersectTop;
+          startY = top;
+        }
+      } else if (angle >= Math.PI && angle < 3 * Math.PI / 2) {
+        // Bottom-left quadrant
+        const xIntersectLeft = left;
+        const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
+        
+        const yIntersectBottom = bottom;
+        const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
+        
+        if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
+          startX = left;
+          startY = yIntersectLeft;
+        } else {
+          startX = xIntersectBottom;
+          startY = bottom;
+        }
+      } else {
+        // Bottom-right quadrant
+        const xIntersectRight = right;
+        const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
+        
+        const yIntersectBottom = bottom;
+        const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
+        
+        if (yIntersectRight >= top && yIntersectRight <= bottom) {
+          startX = right;
+          startY = yIntersectRight;
+        } else {
+          startX = xIntersectBottom;
+          startY = bottom;
+        }
+      }
+      
+      // Calculate end points
+      const endX = startX + Math.cos(angle) * ray.height;
+      const endY = startY + Math.sin(angle) * ray.height;
+      
+      // Create gradient for the ray
+      const gradient = this.ctx.createLinearGradient(startX, startY, endX, endY);
+      
+      // Get base color
+      const baseColor = ray.color;
+      
+      // Extract hue value (assumes hsl format)
+      const hueMatch = baseColor.match(/hsl\((\d+)/);
+      const hue = hueMatch ? parseInt(hueMatch[1]) : 0;
+      
+      gradient.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.7)`);
+      gradient.addColorStop(1, `hsla(${hue}, 100%, 50%, 0)`);
+      
+      // Draw ray
+      this.ctx.strokeStyle = gradient;
+      this.ctx.lineWidth = 2;
+      this.ctx.lineCap = 'round';
+      
+      this.ctx.beginPath();
+      this.ctx.moveTo(startX, startY);
+      this.ctx.lineTo(endX, endY);
+      this.ctx.stroke();
+      
+      // Draw a smaller, brighter core
+      this.ctx.strokeStyle = baseColor;
+      this.ctx.lineWidth = 1;
+      
+      this.ctx.beginPath();
+      this.ctx.moveTo(startX, startY);
+      this.ctx.lineTo(startX + Math.cos(angle) * ray.height * 0.7, 
+                      startY + Math.sin(angle) * ray.height * 0.7);
+      this.ctx.stroke();
     }
   }
   
@@ -412,6 +599,15 @@ class RectangularVisualization extends BaseVisualization {
     const flashOpacity = intensity * 0.15;
     this.ctx.fillStyle = `rgba(255, 255, 255, ${flashOpacity})`;
     this.ctx.fillRect(0, 0, this.width, this.height);
+  }
+  
+  // Handle canvas resizing
+  protected resizeCanvas(): void {
+    super.resizeCanvas();
+    
+    // Update center rect size based on new canvas dimensions
+    this.centerRectWidth = Math.min(this.width * 0.7, 400);
+    this.centerRectHeight = this.centerRectWidth * 0.75; // 4:3 aspect ratio
   }
   
   // Clean up any resources
