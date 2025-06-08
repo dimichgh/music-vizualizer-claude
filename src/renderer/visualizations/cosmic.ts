@@ -1,4 +1,4 @@
-import BaseVisualization from './base';
+import Base2DVisualization from './base2d';
 import { AudioAnalysisData } from '../../shared/types';
 import { DEFAULT_COLOR_SCHEMES } from '../../shared/constants';
 
@@ -23,7 +23,7 @@ interface Nebula {
   phase: number;
 }
 
-class CosmicVisualization extends BaseVisualization {
+class CosmicVisualization extends Base2DVisualization {
   private stars: Star[] = [];
   private nebulae: Nebula[] = [];
   private time: number = 0;

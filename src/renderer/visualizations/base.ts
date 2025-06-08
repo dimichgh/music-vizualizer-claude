@@ -1,93 +1,20 @@
+import Base2DVisualization from './base2d';
 import { AudioAnalysisData } from '../../shared/types';
 
 /**
  * Base class for all visualizations
+ * 
+ * @deprecated Use Base2DVisualization for 2D visualizations or Base3DVisualization for 3D visualizations
  */
-abstract class BaseVisualization {
-  protected canvas: HTMLCanvasElement;
-  protected ctx: CanvasRenderingContext2D;
-  protected width: number;
-  protected height: number;
-  protected sensitivity: number = 1.0;
-  protected colorScheme: string[] = ['#FF0000', '#00FF00', '#0000FF'];
-  
+abstract class BaseVisualization extends Base2DVisualization {
   constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
-    const context = canvas.getContext('2d');
-    
-    if (!context) {
-      throw new Error('Could not get 2D context from canvas');
-    }
-    
-    this.ctx = context;
-    this.width = canvas.width;
-    this.height = canvas.height;
-    
-    // Make sure canvas is properly sized
-    this.resizeCanvas();
-    
-    // Handle window resize
-    window.addEventListener('resize', this.resizeCanvas.bind(this));
-  }
-  
-  /**
-   * Resize canvas to match its display size
-   */
-  protected resizeCanvas(): void {
-    const displayWidth = this.canvas.clientWidth;
-    const displayHeight = this.canvas.clientHeight;
-    
-    // Check if canvas size needs to be updated
-    if (this.canvas.width !== displayWidth || this.canvas.height !== displayHeight) {
-      this.canvas.width = displayWidth;
-      this.canvas.height = displayHeight;
-      this.width = displayWidth;
-      this.height = displayHeight;
-    }
-  }
-  
-  /**
-   * Set the visualization sensitivity
-   */
-  public setSensitivity(sensitivity: number): void {
-    this.sensitivity = Math.max(0, Math.min(2, sensitivity));
-  }
-  
-  /**
-   * Set the color scheme to use for the visualization
-   */
-  public setColorScheme(colors: string[]): void {
-    if (colors.length > 0) {
-      this.colorScheme = colors;
-    }
-  }
-  
-  /**
-   * Clear the canvas
-   */
-  protected clear(): void {
-    this.ctx.clearRect(0, 0, this.width, this.height);
-  }
-  
-  /**
-   * Apply fade effect (useful for trails)
-   */
-  protected fade(alpha: number = 0.1): void {
-    this.ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
-    this.ctx.fillRect(0, 0, this.width, this.height);
+    super(canvas);
   }
   
   /**
    * Draw the visualization based on audio analysis data
    */
   public abstract draw(analysisData: AudioAnalysisData): void;
-  
-  /**
-   * Clean up any resources
-   */
-  public destroy(): void {
-    window.removeEventListener('resize', this.resizeCanvas.bind(this));
-  }
 }
 
 export default BaseVisualization;

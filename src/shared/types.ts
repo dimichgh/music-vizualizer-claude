@@ -128,6 +128,16 @@ export interface VisualizationSettings {
   colorCycling?: boolean;     // Enable color cycling effect
   colorCyclingSpeed?: number; // Speed of color cycling (0.05 to 2.0)
   rayCount?: number;          // Number of rays to display (50 to 500)
+  
+  // Cosmic visualization settings
+  starDensity?: number;       // 0.1 to 1.0, controls density of stars
+  starSpeed?: number;         // 0.1 to 2.0, controls speed of star movement
+  starDepth?: number;         // 0.1 to 1.0, controls depth effect of stars
+  
+  // Psychedelic visualization settings
+  complexity?: number;        // 0.1 to 1.0, controls complexity of patterns
+  waveDensity?: number;       // 0.1 to 1.0, controls density of waves
+  warping?: number;           // 0.1 to 1.0, controls warping effect
 }
 
 // Declare global types for TypeScript

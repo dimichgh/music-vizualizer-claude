@@ -1,4 +1,4 @@
-import BaseVisualization from './base';
+import Base2DVisualization from './base2d';
 import { AudioAnalysisData } from '../../shared/types';
 import { DEFAULT_COLOR_SCHEMES } from '../../shared/constants';
 
@@ -61,7 +61,7 @@ interface YardElements {
   ornaments: LightElement[];
 }
 
-class HolidayVisualization extends BaseVisualization {
+class HolidayVisualization extends Base2DVisualization {
   private elements: LightElement[] = [];
   private house: HouseStructure = {
     roof: [],

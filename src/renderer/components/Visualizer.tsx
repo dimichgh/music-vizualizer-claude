@@ -4,6 +4,8 @@ import SunburstVisualization from '../visualizations/sunburst';
 import RectangularVisualization from '../visualizations/rectangular';
 import HolidayVisualization from '../visualizations/holiday';
 import Holiday3DVisualization from '../visualizations/holiday3d';
+import CosmicVisualization from '../visualizations/cosmic';
+import PsychedelicVisualization from '../visualizations/psychedelic';
 import { FFT_SIZE, SMOOTHING_TIME_CONSTANT } from '../../shared/constants';
 
 interface VisualizerProps {
@@ -44,6 +46,8 @@ const Visualizer: React.FC<VisualizerProps> = ({
   const rectangularRef = useRef<RectangularVisualization | null>(null);
   const holidayRef = useRef<HolidayVisualization | null>(null);
   const holiday3DRef = useRef<Holiday3DVisualization | null>(null);
+  const cosmicRef = useRef<CosmicVisualization | null>(null);
+  const psychedelicRef = useRef<PsychedelicVisualization | null>(null);
   
   // Camera controls for 3D visualization
   const [localCameraControls, setLocalCameraControls] = useState<CameraControls>({
@@ -263,6 +267,14 @@ const Visualizer: React.FC<VisualizerProps> = ({
         holiday3DRef.current.destroy();
         holiday3DRef.current = null;
       }
+      if (cosmicRef.current) {
+        cosmicRef.current.destroy();
+        cosmicRef.current = null;
+      }
+      if (psychedelicRef.current) {
+        psychedelicRef.current.destroy();
+        psychedelicRef.current = null;
+      }
     };
   }, []);
 
@@ -360,47 +372,36 @@ const Visualizer: React.FC<VisualizerProps> = ({
     timeDomainData: Uint8Array,
     averageFrequency: number
   ) => {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw stars
-    const starCount = 200;
-    for (let i = 0; i < starCount; i++) {
-      const x = Math.random() * canvas.width;
-      const y = Math.random() * canvas.height;
-      const radius = Math.random() * 2 + (averageFrequency / 255) * 3;
-      
-      const freqIndex = Math.floor(Math.random() * frequencyData.length);
-      const brightness = 50 + (frequencyData[freqIndex] / 255) * 50;
-      
-      ctx.fillStyle = `rgba(255, 255, 255, ${brightness / 100})`;
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
+    // Create a persistent CosmicVisualization instance or reuse existing one
+    if (!cosmicRef.current) {
+      cosmicRef.current = new CosmicVisualization(canvas);
     }
     
-    // Draw nebula-like shapes
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+    // Create a properly formed analysis data object
+    const cosmicAnalysisData: AudioAnalysisData = {
+      frequencyData,
+      waveformData: new Uint8Array(frequencyData.length), // Placeholder with correct size
+      timeDomainData,
+      averageFrequency,
+      peaks: analysisData?.peaks || [], // Use actual peaks if available
+      bpm: analysisData?.bpm || null,
+      instrumentPrediction: null
+    };
     
-    for (let i = 0; i < 5; i++) {
-      const radius = 50 + Math.random() * 200 + (averageFrequency / 255) * 100;
-      const x = centerX + (Math.random() - 0.5) * canvas.width * 0.5;
-      const y = centerY + (Math.random() - 0.5) * canvas.height * 0.5;
+    // Apply visualization settings if available
+    if (visualizationSettings) {
+      // Apply general settings if the methods are available
+      if (cosmicRef.current.setStarDensity) {
+        cosmicRef.current.setStarDensity(visualizationSettings.starDensity || 0.8);
+      }
       
-      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      
-      const hue1 = Math.random() * 60 + 180; // Blue to purple
-      const hue2 = hue1 + 30;
-      
-      gradient.addColorStop(0, `hsla(${hue1}, 100%, 50%, 0.2)`);
-      gradient.addColorStop(1, `hsla(${hue2}, 100%, 50%, 0)`);
-      
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
+      if (cosmicRef.current.setStarSpeed) {
+        cosmicRef.current.setStarSpeed(visualizationSettings.starSpeed || 0.5);
+      }
     }
+    
+    // Use the persistent cosmic visualization to draw
+    cosmicRef.current.draw(cosmicAnalysisData);
   };
   
   const drawPsychedelic = (
@@ -410,69 +411,40 @@ const Visualizer: React.FC<VisualizerProps> = ({
     timeDomainData: Uint8Array,
     averageFrequency: number
   ) => {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    
-    // Draw psychedelic circles
-    const circleCount = 5;
-    for (let i = 0; i < circleCount; i++) {
-      const freqIndex = Math.floor((i / circleCount) * frequencyData.length);
-      const amplitude = frequencyData[freqIndex] / 255;
-      
-      const radius = 50 + i * 50 + amplitude * 100;
-      
-      const hue = (Date.now() / 100 + i * 30) % 360;
-      
-      ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
-      ctx.lineWidth = 2 + amplitude * 8;
-      
-      ctx.beginPath();
-      ctx.arc(
-        centerX, 
-        centerY, 
-        radius, 
-        0, 
-        Math.PI * 2
-      );
-      ctx.stroke();
+    // Create a persistent PsychedelicVisualization instance or reuse existing one
+    if (!psychedelicRef.current) {
+      psychedelicRef.current = new PsychedelicVisualization(canvas);
     }
     
-    // Draw spiral patterns
-    const spiralCount = 5;
-    const maxRadius = Math.min(canvas.width, canvas.height) * 0.4;
+    // Create a properly formed analysis data object
+    const psychedelicAnalysisData: AudioAnalysisData = {
+      frequencyData,
+      waveformData: new Uint8Array(frequencyData.length), // Placeholder with correct size
+      timeDomainData,
+      averageFrequency,
+      peaks: analysisData?.peaks || [], // Use actual peaks if available
+      bpm: analysisData?.bpm || null,
+      instrumentPrediction: null
+    };
     
-    for (let i = 0; i < spiralCount; i++) {
-      const freqIndex = Math.floor((i / spiralCount) * frequencyData.length);
-      const amplitude = frequencyData[freqIndex] / 255;
+    // Apply visualization settings if available
+    if (visualizationSettings) {
+      // Apply general settings if the methods are available
+      if (psychedelicRef.current.setComplexity) {
+        psychedelicRef.current.setComplexity(visualizationSettings.complexity || 0.8);
+      }
       
-      const rotation = (Date.now() / 1000 + i) % (Math.PI * 2);
-      const arms = 5 + Math.floor(amplitude * 10);
+      if (psychedelicRef.current.setWaveDensity) {
+        psychedelicRef.current.setWaveDensity(visualizationSettings.waveDensity || 0.7);
+      }
       
-      ctx.strokeStyle = `hsl(${(i * 60) % 360}, 100%, 50%)`;
-      ctx.lineWidth = 2 + amplitude * 3;
-      
-      for (let arm = 0; arm < arms; arm++) {
-        ctx.beginPath();
-        
-        for (let r = 0; r < maxRadius; r += 5) {
-          const angle = rotation + (arm / arms) * Math.PI * 2 + (r / maxRadius) * Math.PI * 4;
-          
-          const x = centerX + Math.cos(angle) * r;
-          const y = centerY + Math.sin(angle) * r;
-          
-          if (r === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
-        }
-        
-        ctx.stroke();
+      if (psychedelicRef.current.setWarping) {
+        psychedelicRef.current.setWarping(visualizationSettings.warping || 0.8);
       }
     }
+    
+    // Use the persistent psychedelic visualization to draw
+    psychedelicRef.current.draw(psychedelicAnalysisData);
   };
   
   const drawSunburst = (

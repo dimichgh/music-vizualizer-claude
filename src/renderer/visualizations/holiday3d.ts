@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import BaseVisualization from './base';
+import Base3DVisualization from './base3d';
 import { AudioAnalysisData, CameraControls, ThreeDElementProps } from '../../shared/types';
 import { DEFAULT_COLOR_SCHEMES } from '../../shared/constants';
 
@@ -44,13 +44,9 @@ interface LightElement {
   update: (time: number, audioData: AudioAnalysisData) => void;
 }
 
-class Holiday3DVisualization extends BaseVisualization {
-  // Three.js properties
-  private scene: THREE.Scene;
-  private camera: THREE.PerspectiveCamera;
-  private renderer: THREE.WebGLRenderer;
+class Holiday3DVisualization extends Base3DVisualization {
+  // Three.js extensions
   private controls: OrbitControls;
-  private clock: THREE.Clock;
   
   // Scene elements
   private elements: SceneElement[] = [];
@@ -68,7 +64,7 @@ class Holiday3DVisualization extends BaseVisualization {
   };
   
   // Camera control properties
-  private cameraControls: CameraControls = {
+  protected cameraControls: CameraControls = {
     position: { x: 0, y: 5, z: 15 },
     target: { x: 0, y: 0, z: 0 },
     zoom: 1,

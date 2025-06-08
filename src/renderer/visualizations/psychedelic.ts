@@ -1,4 +1,4 @@
-import BaseVisualization from './base';
+import Base2DVisualization from './base2d';
 import { AudioAnalysisData } from '../../shared/types';
 import { DEFAULT_COLOR_SCHEMES } from '../../shared/constants';
 
@@ -10,7 +10,7 @@ interface Wave {
   color: string;
 }
 
-class PsychedelicVisualization extends BaseVisualization {
+class PsychedelicVisualization extends Base2DVisualization {
   private time: number = 0;
   private waves: Wave[] = [];
   private complexity: number = 0.8;

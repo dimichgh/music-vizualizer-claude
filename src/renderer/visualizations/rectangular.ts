@@ -1,4 +1,4 @@
-import BaseVisualization from './base';
+import Base2DVisualization from './base2d';
 import { AudioAnalysisData } from '../../shared/types';
 import { DEFAULT_COLOR_SCHEMES } from '../../shared/constants';
 
@@ -18,7 +18,7 @@ interface SpectrumRay {
   baseHue?: number; // Base hue value for color cycling
 }
 
-class RectangularVisualization extends BaseVisualization {
+class RectangularVisualization extends Base2DVisualization {
   private centerRectWidth: number = 0; // Will be set dynamically based on canvas size
   private centerRectHeight: number = 0; // Will be set dynamically based on canvas size
   private centerPulse: number = 0;

@@ -1,4 +1,4 @@
-import BaseVisualization from './base';
+import Base2DVisualization from './base2d';
 import { AudioAnalysisData, InstrumentDetection } from '../../shared/types';
 import { INSTRUMENTS } from '../../shared/constants';
 
@@ -11,7 +11,7 @@ interface Figure {
   rotation: number;
 }
 
-class FiguresVisualization extends BaseVisualization {
+class FiguresVisualization extends Base2DVisualization {
   private figures: Map<string, Figure> = new Map();
   private readonly figureImages: Map<string, HTMLImageElement> = new Map();
   private readonly defaultFigureSize: number = 200;

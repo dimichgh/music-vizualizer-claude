@@ -1,4 +1,4 @@
-import BaseVisualization from './base';
+import Base2DVisualization from './base2d';
 import { AudioAnalysisData } from '../../shared/types';
 import { DEFAULT_COLOR_SCHEMES } from '../../shared/constants';
 
@@ -10,7 +10,7 @@ interface SunRay {
   frequency: number;
 }
 
-class SunburstVisualization extends BaseVisualization {
+class SunburstVisualization extends Base2DVisualization {
   private rays: SunRay[] = [];
   private centerRadius: number = 150; // Increased center size
   private centerPulse: number = 0;
