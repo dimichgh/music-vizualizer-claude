@@ -154,6 +154,11 @@ class Holiday3DVisualization extends BaseVisualization {
     
     // Initialize Three.js components with enhanced settings
     this.scene = new THREE.Scene();
+    
+    // Make sure width and height are valid before creating camera
+    if (this.width === 0) this.width = canvas.clientWidth || 800;
+    if (this.height === 0) this.height = canvas.clientHeight || 600;
+    
     this.camera = new THREE.PerspectiveCamera(
       65, // FOV (increased for wider view)
       this.width / this.height, // Aspect ratio
@@ -162,12 +167,23 @@ class Holiday3DVisualization extends BaseVisualization {
     );
     
     // Set up renderer with enhanced settings
-    this.renderer = new THREE.WebGLRenderer({
-      canvas: this.canvas,
-      antialias: true,
-      alpha: true,
-      powerPreference: 'high-performance' // Request high performance GPU
-    });
+    // We're using a dedicated canvas for WebGL so we don't need to check for existing contexts
+    try {
+      // First, ensure the canvas is properly initialized
+      if (this.width === 0) this.width = this.canvas.clientWidth || 800;
+      if (this.height === 0) this.height = this.canvas.clientHeight || 600;
+      
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: this.canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance', // Request high performance GPU
+        preserveDrawingBuffer: true // Important for mixing with other visuals
+      });
+    } catch (e) {
+      console.error('Failed to create WebGL renderer:', e);
+      throw e;
+    }
     this.renderer.setSize(this.width, this.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit for performance
     this.renderer.shadowMap.enabled = true;
@@ -2512,6 +2528,11 @@ class Holiday3DVisualization extends BaseVisualization {
   
   // Main draw function called on each frame
   public draw(analysisData: AudioAnalysisData): void {
+    // Check if renderer is initialized
+    if (!this.renderer) {
+      console.error('Cannot draw: WebGL renderer is not initialized');
+      return;
+    }
     // Update time
     this.time += this.clock.getDelta();
     
@@ -2560,7 +2581,11 @@ class Holiday3DVisualization extends BaseVisualization {
     this.updateSnowParticles(this.time, modifiedAnalysisData);
     
     // Render the scene
-    this.renderer.render(this.scene, this.camera);
+    try {
+      this.renderer.render(this.scene, this.camera);
+    } catch (error) {
+      console.error('Error rendering 3D scene:', error);
+    }
   }
   
   // Apply settings to modify analysis data
@@ -2822,12 +2847,15 @@ class Holiday3DVisualization extends BaseVisualization {
   protected resizeCanvas(): void {
     super.resizeCanvas();
     
-    // Update camera aspect ratio
-    this.camera.aspect = this.width / this.height;
-    this.camera.updateProjectionMatrix();
-    
-    // Update renderer size
-    this.renderer.setSize(this.width, this.height);
+    // Check if camera and renderer are initialized
+    if (this.camera && this.renderer) {
+      // Update camera aspect ratio
+      this.camera.aspect = this.width / this.height;
+      this.camera.updateProjectionMatrix();
+      
+      // Update renderer size
+      this.renderer.setSize(this.width, this.height);
+    }
   }
   
   // Cleanup
@@ -2922,27 +2950,32 @@ class Holiday3DVisualization extends BaseVisualization {
   public destroy(): void {
     super.destroy();
     
-    // Remove all event listeners
-    this.controls.dispose();
+    // Check if controls are initialized before disposing
+    if (this.controls) {
+      this.controls.dispose();
+    }
     
-    // Dispose of all geometries and materials
-    this.scene.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        if (object.geometry) object.geometry.dispose();
-        
-        if (object.material) {
-          if (Array.isArray(object.material)) {
-            object.material.forEach(material => material.dispose());
-          } else {
-            object.material.dispose();
+    // Check if scene is initialized before cleaning up
+    if (this.scene) {
+      // Dispose of all geometries and materials
+      this.scene.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          if (object.geometry) object.geometry.dispose();
+          
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => material.dispose());
+            } else {
+              object.material.dispose();
+            }
           }
         }
+      });
+      
+      // Clear scene
+      while (this.scene.children.length > 0) {
+        this.scene.remove(this.scene.children[0]);
       }
-    });
-    
-    // Clear scene
-    while (this.scene.children.length > 0) {
-      this.scene.remove(this.scene.children[0]);
     }
     
     // Clear references

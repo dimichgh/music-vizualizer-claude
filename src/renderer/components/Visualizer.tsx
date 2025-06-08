@@ -29,7 +29,15 @@ const Visualizer: React.FC<VisualizerProps> = ({
   cameraControls,
   visualizationSettings,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Use separate canvas refs for 2D and 3D visualizations to avoid context conflicts
+  const canvas2DRef = useRef<HTMLCanvasElement>(null);
+  const canvas3DRef = useRef<HTMLCanvasElement>(null);
+  
+  // Helper to get the active canvas based on visualization type
+  const getActiveCanvas = () => {
+    return visualizationType === VisualizationType.HOLIDAY_3D ? 
+      canvas3DRef.current : canvas2DRef.current;
+  };
   // We now receive these refs from props instead of creating them here
   const rafIdRef = useRef<number | null>(null);
   const sunburstRef = useRef<SunburstVisualization | null>(null);
@@ -53,16 +61,60 @@ const Visualizer: React.FC<VisualizerProps> = ({
   useEffect(() => {
     if (!audioData || !analyserNodeRef.current) return;
     
+    // Clean up existing visualizations when the visualization type changes
+    if (visualizationType === VisualizationType.HOLIDAY_3D) {
+      // Clean up 2D visualizations
+      if (sunburstRef.current) {
+        sunburstRef.current.destroy();
+        sunburstRef.current = null;
+      }
+      if (rectangularRef.current) {
+        rectangularRef.current.destroy();
+        rectangularRef.current = null;
+      }
+      if (holidayRef.current) {
+        holidayRef.current.destroy();
+        holidayRef.current = null;
+      }
+      
+      // Ensure the 3D canvas is ready for use
+      const canvas3D = canvas3DRef.current;
+      if (canvas3D) {
+        canvas3D.width = canvas3D.clientWidth || window.innerWidth;
+        canvas3D.height = canvas3D.clientHeight || window.innerHeight;
+      }
+    } else {
+      // Clean up 3D visualization
+      if (holiday3DRef.current) {
+        holiday3DRef.current.destroy();
+        holiday3DRef.current = null;
+      }
+      
+      // Ensure the 2D canvas is ready for use
+      const canvas2D = canvas2DRef.current;
+      if (canvas2D) {
+        canvas2D.width = canvas2D.clientWidth || window.innerWidth;
+        canvas2D.height = canvas2D.clientHeight || window.innerHeight;
+      }
+    }
+    
     if (isPlaying) {
       // Start animation
       startVisualization();
     } else {
       // Stop animation
-      stopVisualization();
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     }
     
     return () => {
-      stopVisualization();
+      // Cleanup function
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
   }, [audioData, isPlaying, visualizationType]);
 
@@ -74,16 +126,23 @@ const Visualizer: React.FC<VisualizerProps> = ({
   }, [mediaUrls, visualizationType]);
 
   const startVisualization = () => {
-    if (!canvasRef.current || !analyserNodeRef.current) return;
+    // Get the appropriate canvas based on visualization type
+    const canvas = getActiveCanvas();
+    if (!canvas || !analyserNodeRef.current) return;
     
     const analyser = analyserNodeRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
     
     // Set canvas dimensions
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+    canvas.width = canvas.clientWidth || window.innerWidth;
+    canvas.height = canvas.clientHeight || window.innerHeight;
+    
+    // Only get 2D context if we're not using 3D visualization
+    let ctx = null;
+    if (visualizationType !== VisualizationType.HOLIDAY_3D) {
+      // For 2D visualizations, clear any existing context first
+      ctx = canvas.getContext('2d');
+      if (!ctx) return;
+    }
     
     // Create data arrays
     const frequencyData = new Uint8Array(analyser.frequencyBinCount);
@@ -125,11 +184,18 @@ const Visualizer: React.FC<VisualizerProps> = ({
         instrumentPrediction: null, // Will implement instrument detection later
       });
       
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw based on visualization type
-      switch (visualizationType) {
+      // Handle visualization based on type
+      if (visualizationType === VisualizationType.HOLIDAY_3D) {
+        // For 3D visualization, we use the dedicated 3D canvas
+        const canvas3D = canvas3DRef.current;
+        if (!canvas3D) return;
+        drawHoliday3D(null, canvas3D, frequencyData, timeDomainData, averageFrequency, analysisData ? analysisData.instrumentPrediction : null);
+      } else if (ctx) {
+        // For 2D visualizations, clear the canvas first
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw based on visualization type
+        switch (visualizationType) {
         case VisualizationType.SPECTRUM:
           drawSpectrum(ctx, canvas, frequencyData);
           break;
@@ -154,15 +220,20 @@ const Visualizer: React.FC<VisualizerProps> = ({
         case VisualizationType.HOLIDAY:
           drawHoliday(ctx, canvas, frequencyData, timeDomainData, averageFrequency, analysisData ? analysisData.instrumentPrediction : null);
           break;
-        case VisualizationType.HOLIDAY_3D:
-          drawHoliday3D(ctx, canvas, frequencyData, timeDomainData, averageFrequency, analysisData ? analysisData.instrumentPrediction : null);
-          break;
+        // HOLIDAY_3D case is handled outside the switch
         default:
           drawSpectrum(ctx, canvas, frequencyData);
+        }
       }
     };
     
-    animate();
+    // Add a small delay before starting animation for Holiday3D
+    // to ensure proper WebGL context initialization
+    if (visualizationType === VisualizationType.HOLIDAY_3D) {
+      setTimeout(() => animate(), 100);
+    } else {
+      animate();
+    }
   };
 
   const stopVisualization = () => {
@@ -513,7 +584,7 @@ const Visualizer: React.FC<VisualizerProps> = ({
   };
   
   const drawHoliday3D = (
-    ctx: CanvasRenderingContext2D,
+    ctx: CanvasRenderingContext2D | null,
     canvas: HTMLCanvasElement,
     frequencyData: Uint8Array,
     timeDomainData: Uint8Array,
@@ -521,8 +592,17 @@ const Visualizer: React.FC<VisualizerProps> = ({
     instrumentPrediction: string | null
   ) => {
     // Create a persistent Holiday3DVisualization instance or reuse existing one
-    if (!holiday3DRef.current) {
-      holiday3DRef.current = new Holiday3DVisualization(canvas);
+    try {
+      if (!holiday3DRef.current) {
+        // Make sure canvas is properly sized
+        if (canvas.width === 0) canvas.width = canvas.clientWidth || window.innerWidth;
+        if (canvas.height === 0) canvas.height = canvas.clientHeight || window.innerHeight;
+        
+        holiday3DRef.current = new Holiday3DVisualization(canvas);
+      }
+    } catch (error) {
+      console.error('Error initializing Holiday3D visualization:', error);
+      return; // Exit the function if initialization fails
     }
     
     // Create a properly formed analysis data object
@@ -582,12 +662,29 @@ const Visualizer: React.FC<VisualizerProps> = ({
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100%', height: '100%' }}
-    />
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {/* 2D Canvas - visible only when not using 3D visualization */}
+      <canvas
+        ref={canvas2DRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          display: visualizationType === VisualizationType.HOLIDAY_3D ? 'none' : 'block'
+        }}
+      />
+      {/* 3D Canvas - visible only when using 3D visualization */}
+      <canvas
+        ref={canvas3DRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          display: visualizationType === VisualizationType.HOLIDAY_3D ? 'block' : 'none'
+        }}
+      />
+    </div>
   );
 };
-
 
 export default Visualizer;
