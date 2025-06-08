@@ -54,6 +54,8 @@ export enum VisualizationType {
   PSYCHEDELIC = 'psychedelic',
   SUNBURST = 'sunburst',
   RECTANGULAR = 'rectangular',
+  HOLIDAY = 'holiday',
+  HOLIDAY_3D = 'holiday_3d',
 }
 
 export interface VisualizationConfig {
@@ -69,6 +71,63 @@ export interface InstrumentDetection {
   instrument: string;
   confidence: number;
   timestamp: number;
+}
+
+// 3D visualization types
+export interface CameraControls {
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  target: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  zoom: number;
+  enableOrbit: boolean;
+  enablePan: boolean;
+  enableZoom: boolean;
+}
+
+export interface ThreeDElementProps {
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  rotation: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  scale: number;
+  color: string;
+  intensity: number;
+  reactsTo: {
+    frequencyRange: [number, number];
+    instrument?: string;
+  };
+}
+
+// Visualization settings for customization
+export interface VisualizationSettings {
+  // General settings
+  brightness: number;       // 0.0 to 2.0, affects overall brightness
+  reactivity: number;       // 0.0 to 2.0, affects how strongly elements react to audio
+  
+  // Holiday3D specific settings
+  snowIntensity?: number;   // 0.0 to 2.0, controls amount of snow
+  auroraIntensity?: number; // 0.0 to 2.0, controls aurora brightness
+  treeLights?: boolean;     // Toggle tree lights
+  crystalVisibility?: boolean; // Toggle ice crystals
+  colorTheme?: 'warm' | 'cool' | 'rainbow' | 'classic'; // Color theme
+  
+  // Rectangular visualization settings
+  colorCycling?: boolean;     // Enable color cycling effect
+  colorCyclingSpeed?: number; // Speed of color cycling (0.05 to 2.0)
+  rayCount?: number;          // Number of rays to display (50 to 500)
 }
 
 // Declare global types for TypeScript

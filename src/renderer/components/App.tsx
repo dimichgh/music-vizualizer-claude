@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import AudioControls from './AudioControls';
 import Visualizer from './Visualizer';
-import { AudioData, VisualizationType } from '../../shared/types';
+import { AudioData, VisualizationType, CameraControls, VisualizationSettings } from '../../shared/types';
 
 const App: React.FC = () => {
   const [audioData, setAudioData] = useState<AudioData | null>(null);
@@ -12,6 +12,25 @@ const App: React.FC = () => {
     VisualizationType.COSMIC
   );
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [cameraControls, setCameraControls] = useState<CameraControls>({
+    position: { x: 0, y: 5, z: 15 },
+    target: { x: 0, y: 0, z: 0 },
+    zoom: 1,
+    enableOrbit: true,
+    enablePan: true,
+    enableZoom: true
+  });
+  
+  // Add visualization settings state
+  const [visualizationSettings, setVisualizationSettings] = useState<VisualizationSettings>({
+    brightness: 1.0,
+    reactivity: 1.0,
+    snowIntensity: 1.0,
+    auroraIntensity: 1.0,
+    treeLights: true,
+    crystalVisibility: true,
+    colorTheme: 'classic'
+  });
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -189,6 +208,64 @@ const App: React.FC = () => {
   const handleVisualizationChange = (type: VisualizationType) => {
     setVisualizationType(type);
   };
+  
+  // Handler for updating visualization settings
+  const handleSettingsChange = (settings: Partial<VisualizationSettings>) => {
+    setVisualizationSettings(prevSettings => ({
+      ...prevSettings,
+      ...settings
+    }));
+  };
+
+  // Camera control handlers
+  const handleCameraReset = () => {
+    if (visualizationType === VisualizationType.HOLIDAY_3D) {
+      setCameraControls({
+        ...cameraControls,
+        position: { x: 0, y: 5, z: 15 },
+        target: { x: 0, y: 0, z: 0 }
+      });
+    }
+  };
+
+  const handleCameraView = (view: 'front' | 'top' | 'side') => {
+    if (visualizationType === VisualizationType.HOLIDAY_3D) {
+      switch (view) {
+        case 'front':
+          setCameraControls({
+            ...cameraControls,
+            position: { x: 0, y: 5, z: 20 },
+            target: { x: 0, y: 0, z: 0 }
+          });
+          break;
+        case 'top':
+          setCameraControls({
+            ...cameraControls,
+            position: { x: 0, y: 20, z: 0.1 },
+            target: { x: 0, y: 0, z: 0 }
+          });
+          break;
+        case 'side':
+          setCameraControls({
+            ...cameraControls,
+            position: { x: 20, y: 5, z: 0 },
+            target: { x: 0, y: 0, z: 0 }
+          });
+          break;
+      }
+    }
+  };
+
+  const handleCameraControlToggle = (control: 'orbit' | 'pan' | 'zoom', enabled: boolean) => {
+    if (visualizationType === VisualizationType.HOLIDAY_3D) {
+      setCameraControls({
+        ...cameraControls,
+        enableOrbit: control === 'orbit' ? enabled : cameraControls.enableOrbit,
+        enablePan: control === 'pan' ? enabled : cameraControls.enablePan,
+        enableZoom: control === 'zoom' ? enabled : cameraControls.enableZoom
+      });
+    }
+  };
 
   return (
     <div className="app-container">
@@ -201,6 +278,8 @@ const App: React.FC = () => {
           sourceNodeRef={sourceNodeRef}
           analyserNodeRef={analyserNodeRef}
           mediaUrls={mediaUrls}
+          cameraControls={cameraControls}
+          visualizationSettings={visualizationSettings}
         />
       </div>
       <div className="controls-container">
@@ -215,6 +294,11 @@ const App: React.FC = () => {
           onMediaOpen={handleMediaOpen}
           visualizationType={visualizationType}
           onVisualizationChange={handleVisualizationChange}
+          onCameraReset={handleCameraReset}
+          onCameraView={handleCameraView}
+          onCameraControlToggle={handleCameraControlToggle}
+          visualizationSettings={visualizationSettings}
+          onSettingsChange={handleSettingsChange}
         />
       </div>
     </div>

@@ -15,6 +15,7 @@ interface SpectrumRay {
   height: number;
   color: string;
   speed: number; // Speed multiplier for more varied motion
+  baseHue?: number; // Base hue value for color cycling
 }
 
 class RectangularVisualization extends BaseVisualization {
@@ -32,6 +33,9 @@ class RectangularVisualization extends BaseVisualization {
   private mediaDuration: number = 5000; // Time in ms to show each media item
   private spectrumRays: SpectrumRay[] = [];
   private rayCount: number = 300; // Even more rays for better coverage
+  private colorCyclingEnabled: boolean = false;
+  private colorCyclingSpeed: number = 0.2; // Degrees per frame
+  private colorCycleOffset: number = 0;
   
   // Color mapping for different instruments (same as sunburst)
   private instrumentColors: Record<string, number> = {
@@ -62,13 +66,15 @@ class RectangularVisualization extends BaseVisualization {
       const angle = (i / this.rayCount) * Math.PI * 2;
       const frequency = Math.floor((i / this.rayCount) * 128); // Map each ray to a frequency bin
       const speed = 0.8 + Math.random() * 0.4; // Random speed multiplier between 0.8 and 1.2
+      const baseHue = (i / this.rayCount) * 360; // Store the base hue for color cycling
       
       this.spectrumRays.push({
         angle,
         frequency,
         height: 0,
-        color: `hsl(${(i / this.rayCount) * 360}, 100%, 50%)`,
-        speed
+        color: `hsl(${baseHue}, 100%, 50%)`,
+        speed,
+        baseHue
       });
     }
   }
@@ -171,6 +177,26 @@ class RectangularVisualization extends BaseVisualization {
     this.reactivityLevel = Math.max(0.1, Math.min(1.0, level));
   }
   
+  public setColorCycling(enabled: boolean): void {
+    this.colorCyclingEnabled = enabled;
+  }
+  
+  public setColorCyclingSpeed(speed: number): void {
+    // Speed is in degrees per frame, limited to reasonable values
+    this.colorCyclingSpeed = Math.max(0.05, Math.min(2.0, speed));
+  }
+  
+  public setRayCount(count: number): void {
+    // Limit ray count between 50 and 500 to ensure good performance and visuals
+    const newCount = Math.max(50, Math.min(500, Math.floor(count)));
+    
+    // Only reinitialize if the count has actually changed
+    if (newCount !== this.rayCount) {
+      this.rayCount = newCount;
+      this.initSpectrumRays();
+    }
+  }
+  
   public setMediaDuration(duration: number): void {
     this.mediaDuration = Math.max(1000, duration);
   }
@@ -200,6 +226,11 @@ class RectangularVisualization extends BaseVisualization {
   
   public draw(analysisData: AudioAnalysisData): void {
     this.time += 0.01;
+    
+    // Update color cycle offset if enabled
+    if (this.colorCyclingEnabled) {
+      this.colorCycleOffset = (this.colorCycleOffset + this.colorCyclingSpeed) % 360;
+    }
     
     // Clear with gradient background
     this.drawBackground();
@@ -283,29 +314,110 @@ class RectangularVisualization extends BaseVisualization {
   }
   
   private updateSpectrumRays(frequencyData: Uint8Array): void {
-    // Update each ray
-    for (let i = 0; i < this.spectrumRays.length; i++) {
-      const ray = this.spectrumRays[i];
+    // Pre-calculate shared values once to avoid redundant calculations
+    const rayLengthFactor = Math.min(this.width, this.height) * 0.15;
+    const raysCount = this.spectrumRays.length;
+    
+    // Process rays in batches for better CPU utilization and cache efficiency
+    const batchSize = 32; // Process 32 rays at a time
+    const batchCount = Math.ceil(raysCount / batchSize);
+    
+    for (let batch = 0; batch < batchCount; batch++) {
+      const startIdx = batch * batchSize;
+      const endIdx = Math.min(startIdx + batchSize, raysCount);
       
-      // Get frequency data for this ray with more emphasis on peaks
-      const freqIndex = ray.frequency;
-      const freqValue = Math.pow(frequencyData[freqIndex] / 255, 1.2); // Emphasize higher values
-      
-      // Calculate max ray height based on canvas dimensions - shorter rays
-      const maxRayHeight = Math.min(this.width, this.height) * 0.15;
-      
-      // Update ray height with less smoothing for more dynamic response
-      ray.height = ray.height * 0.4 + (freqValue * maxRayHeight * ray.speed) * 0.6;
-      
-      // Update ray color based on position (full gradient around the rectangle)
-      const hue = (i / this.spectrumRays.length) * 360; // Full color spectrum
-      const saturation = 90 + freqValue * 10; // Higher saturation
-      const lightness = 50 + freqValue * 30; // Brighter colors
-      
-      ray.color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      for (let i = startIdx; i < endIdx; i++) {
+        const ray = this.spectrumRays[i];
+        
+        // Get frequency data for this ray with more emphasis on peaks
+        const freqIndex = ray.frequency;
+        const freqValue = Math.pow(frequencyData[freqIndex] / 255, 1.2); // Emphasize higher values
+        
+        // Update ray height with less smoothing for more dynamic response
+        ray.height = ray.height * 0.4 + (freqValue * rayLengthFactor * ray.speed) * 0.6;
+        
+        // Apply color cycling if enabled
+        let hue;
+        if (this.colorCyclingEnabled && ray.baseHue !== undefined) {
+          // Shift the base hue by the current color cycle offset
+          hue = (ray.baseHue + this.colorCycleOffset) % 360;
+        } else {
+          // Otherwise use the position-based hue as before
+          hue = (i / raysCount) * 360;
+        }
+        
+        const saturation = 90 + freqValue * 10; // Higher saturation
+        const lightness = 50 + freqValue * 30; // Brighter colors
+        
+        ray.color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      }
     }
   }
   
+  // Pre-calculate intersection points for optimized ray drawing
+  private findRayIntersection(angle: number, rectBounds: { left: number, right: number, top: number, bottom: number, centerX: number, centerY: number }): { x: number, y: number } {
+    const { left, right, top, bottom, centerX, centerY } = rectBounds;
+    let startX = centerX;
+    let startY = centerY;
+    
+    // Handle special angles first (horizontal and vertical) to avoid division by zero
+    if (angle === 0) {
+      return { x: right, y: centerY };
+    } else if (angle === Math.PI) {
+      return { x: left, y: centerY };
+    } else if (angle === Math.PI / 2) {
+      return { x: centerX, y: top };
+    } else if (angle === 3 * Math.PI / 2) {
+      return { x: centerX, y: bottom };
+    }
+    
+    // Now handle the general cases by quadrant
+    const tanAngle = Math.tan(angle);
+    const cotAngle = 1 / tanAngle; // Precompute cotangent for efficiency
+    
+    if (angle >= 0 && angle < Math.PI / 2) {
+      // Top-right quadrant
+      const yIntersectRight = centerY + tanAngle * (right - centerX);
+      const xIntersectTop = centerX + cotAngle * (top - centerY);
+      
+      if (yIntersectRight >= top && yIntersectRight <= bottom) {
+        return { x: right, y: yIntersectRight };
+      } else {
+        return { x: xIntersectTop, y: top };
+      }
+    } else if (angle >= Math.PI / 2 && angle < Math.PI) {
+      // Top-left quadrant
+      const yIntersectLeft = centerY + tanAngle * (left - centerX);
+      const xIntersectTop = centerX + cotAngle * (top - centerY);
+      
+      if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
+        return { x: left, y: yIntersectLeft };
+      } else {
+        return { x: xIntersectTop, y: top };
+      }
+    } else if (angle >= Math.PI && angle < 3 * Math.PI / 2) {
+      // Bottom-left quadrant
+      const yIntersectLeft = centerY + tanAngle * (left - centerX);
+      const xIntersectBottom = centerX + cotAngle * (bottom - centerY);
+      
+      if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
+        return { x: left, y: yIntersectLeft };
+      } else {
+        return { x: xIntersectBottom, y: bottom };
+      }
+    } else {
+      // Bottom-right quadrant
+      const yIntersectRight = centerY + tanAngle * (right - centerX);
+      const xIntersectBottom = centerX + cotAngle * (bottom - centerY);
+      
+      if (yIntersectRight >= top && yIntersectRight <= bottom) {
+        return { x: right, y: yIntersectRight };
+      } else {
+        return { x: xIntersectBottom, y: bottom };
+      }
+    }
+  }
+
   private drawSpectrumRays(): void {
     const centerX = this.width / 2;
     const centerY = this.height / 2;
@@ -320,125 +432,64 @@ class RectangularVisualization extends BaseVisualization {
     const top = centerY - rectHeight / 2;
     const bottom = centerY + rectHeight / 2;
     
-    // Draw rays
-    for (let i = 0; i < this.spectrumRays.length; i++) {
-      const ray = this.spectrumRays[i];
-      const angle = ray.angle;
+    // Cache rectangle bounds to avoid recalculating for each ray
+    const rectBounds = { left, right, top, bottom, centerX, centerY };
+    
+    // Pre-allocate arrays for batch rendering
+    const batchSize = 32;
+    const batchCount = Math.ceil(this.spectrumRays.length / batchSize);
+    
+    for (let batch = 0; batch < batchCount; batch++) {
+      const startIdx = batch * batchSize;
+      const endIdx = Math.min(startIdx + batchSize, this.spectrumRays.length);
       
-      // Determine which side of the rectangle this ray originates from
-      let startX = centerX;
-      let startY = centerY;
-      
-      // Find the intersection point of the ray with the rectangle
-      try {
-        if (angle >= 0 && angle < Math.PI / 2) {
-          // Top-right quadrant
-          const xIntersectRight = right;
-          const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
-          
-          const yIntersectTop = top;
-          const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
-          
-          if (yIntersectRight >= top && yIntersectRight <= bottom) {
-            startX = right;
-            startY = yIntersectRight;
-          } else if (xIntersectTop >= left && xIntersectTop <= right) {
-            startX = xIntersectTop;
-            startY = top;
-          }
-        } else if (angle >= Math.PI / 2 && angle < Math.PI) {
-          // Top-left quadrant
-          const xIntersectLeft = left;
-          const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
-          
-          const yIntersectTop = top;
-          const xIntersectTop = centerX + (top - centerY) / Math.tan(angle);
-          
-          if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
-            startX = left;
-            startY = yIntersectLeft;
-          } else if (xIntersectTop >= left && xIntersectTop <= right) {
-            startX = xIntersectTop;
-            startY = top;
-          }
-        } else if (angle >= Math.PI && angle < 3 * Math.PI / 2) {
-          // Bottom-left quadrant
-          const xIntersectLeft = left;
-          const yIntersectLeft = centerY + Math.tan(angle) * (left - centerX);
-          
-          const yIntersectBottom = bottom;
-          const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
-          
-          if (yIntersectLeft >= top && yIntersectLeft <= bottom) {
-            startX = left;
-            startY = yIntersectLeft;
-          } else if (xIntersectBottom >= left && xIntersectBottom <= right) {
-            startX = xIntersectBottom;
-            startY = bottom;
-          }
-        } else {
-          // Bottom-right quadrant
-          const xIntersectRight = right;
-          const yIntersectRight = centerY + Math.tan(angle) * (right - centerX);
-          
-          const yIntersectBottom = bottom;
-          const xIntersectBottom = centerX + (bottom - centerY) / Math.tan(angle);
-          
-          if (yIntersectRight >= top && yIntersectRight <= bottom) {
-            startX = right;
-            startY = yIntersectRight;
-          } else if (xIntersectBottom >= left && xIntersectBottom <= right) {
-            startX = xIntersectBottom;
-            startY = bottom;
-          }
-        }
-      } catch (e) {
-        // Handle any edge cases (like division by zero)
-        // Special case for vertical and horizontal angles
-        if (angle === 0 || angle === Math.PI) {
-          startX = angle === 0 ? right : left;
-          startY = centerY;
-        } else if (angle === Math.PI / 2 || angle === 3 * Math.PI / 2) {
-          startX = centerX;
-          startY = angle === Math.PI / 2 ? top : bottom;
-        }
-      }
-      
-      // Handle division by zero cases for vertical and horizontal rays
-      if (!isFinite(startX) || isNaN(startX)) startX = centerX;
-      if (!isFinite(startY) || isNaN(startY)) startY = centerY;
-      
-      // Calculate end points
-      const endX = startX + Math.cos(angle) * ray.height;
-      const endY = startY + Math.sin(angle) * ray.height;
-      
-      // Create gradient for the ray
-      const gradient = this.ctx.createLinearGradient(startX, startY, endX, endY);
-      
-      // Get base color
-      const baseColor = ray.color;
-      
-      // Extract hue value (assumes hsl format)
-      const hueMatch = baseColor.match(/hsl\((\d+)/);
-      const hue = hueMatch ? parseInt(hueMatch[1]) : 0;
-      
-      // Brighter gradient colors
-      gradient.addColorStop(0, `hsla(${hue}, 100%, 80%, 0.85)`);
-      gradient.addColorStop(1, `hsla(${hue}, 100%, 60%, 0)`);
-      
-      // Draw ray with glow effect
+      // Use path batching to reduce draw calls
       this.ctx.save();
-      this.ctx.shadowBlur = 8; // More pronounced glow
-      this.ctx.shadowColor = `hsla(${hue}, 100%, 70%, 0.5)`;
       
-      this.ctx.strokeStyle = gradient;
-      this.ctx.lineWidth = 1.5 + Math.random(); // Slightly thinner lines but still varied
-      this.ctx.lineCap = 'round';
-      
-      this.ctx.beginPath();
-      this.ctx.moveTo(startX, startY);
-      this.ctx.lineTo(endX, endY);
-      this.ctx.stroke();
+      for (let i = startIdx; i < endIdx; i++) {
+        const ray = this.spectrumRays[i];
+        const angle = ray.angle;
+        
+        // Find intersection point of ray with rectangle using optimized method
+        const startPoint = this.findRayIntersection(angle, rectBounds);
+        const startX = startPoint.x;
+        const startY = startPoint.y;
+        
+        // Handle any invalid points by setting to center (shouldn't happen with the improved algorithm)
+        const validX = isFinite(startX) && !isNaN(startX) ? startX : centerX;
+        const validY = isFinite(startY) && !isNaN(startY) ? startY : centerY;
+        
+        // Calculate end points
+        const endX = validX + Math.cos(angle) * ray.height;
+        const endY = validY + Math.sin(angle) * ray.height;
+        
+        // Create gradient for the ray
+        const gradient = this.ctx.createLinearGradient(validX, validY, endX, endY);
+        
+        // Get base color
+        const baseColor = ray.color;
+        
+        // Extract hue value (assumes hsl format)
+        const hueMatch = baseColor.match(/hsl\((\d+)/);
+        const hue = hueMatch ? parseInt(hueMatch[1]) : 0;
+        
+        // Brighter gradient colors
+        gradient.addColorStop(0, `hsla(${hue}, 100%, 80%, 0.85)`);
+        gradient.addColorStop(1, `hsla(${hue}, 100%, 60%, 0)`);
+        
+        // Draw ray with glow effect
+        this.ctx.shadowBlur = 8; // More pronounced glow
+        this.ctx.shadowColor = `hsla(${hue}, 100%, 70%, 0.5)`;
+        
+        this.ctx.strokeStyle = gradient;
+        this.ctx.lineWidth = 1.5 + (i % 4) * 0.25; // More deterministic variation that's still visually interesting
+        this.ctx.lineCap = 'round';
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(validX, validY);
+        this.ctx.lineTo(endX, endY);
+        this.ctx.stroke();
+      }
       
       this.ctx.restore();
     }

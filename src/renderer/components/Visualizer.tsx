@@ -1,7 +1,9 @@
 import React, { useRef, useEffect, useState, MutableRefObject } from 'react';
-import { AudioData, VisualizationType, AudioAnalysisData } from '../../shared/types';
+import { AudioData, VisualizationType, AudioAnalysisData, CameraControls, VisualizationSettings } from '../../shared/types';
 import SunburstVisualization from '../visualizations/sunburst';
 import RectangularVisualization from '../visualizations/rectangular';
+import HolidayVisualization from '../visualizations/holiday';
+import Holiday3DVisualization from '../visualizations/holiday3d';
 import { FFT_SIZE, SMOOTHING_TIME_CONSTANT } from '../../shared/constants';
 
 interface VisualizerProps {
@@ -12,6 +14,8 @@ interface VisualizerProps {
   sourceNodeRef: MutableRefObject<AudioBufferSourceNode | null>;
   analyserNodeRef: MutableRefObject<AnalyserNode | null>;
   mediaUrls?: string[]; // New prop for media URLs
+  cameraControls?: CameraControls; // New prop for camera controls
+  visualizationSettings?: VisualizationSettings; // New prop for visualization settings
 }
 
 const Visualizer: React.FC<VisualizerProps> = ({
@@ -22,12 +26,26 @@ const Visualizer: React.FC<VisualizerProps> = ({
   sourceNodeRef,
   analyserNodeRef,
   mediaUrls = [],
+  cameraControls,
+  visualizationSettings,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // We now receive these refs from props instead of creating them here
   const rafIdRef = useRef<number | null>(null);
   const sunburstRef = useRef<SunburstVisualization | null>(null);
   const rectangularRef = useRef<RectangularVisualization | null>(null);
+  const holidayRef = useRef<HolidayVisualization | null>(null);
+  const holiday3DRef = useRef<Holiday3DVisualization | null>(null);
+  
+  // Camera controls for 3D visualization
+  const [localCameraControls, setLocalCameraControls] = useState<CameraControls>({
+    position: { x: 0, y: 5, z: 15 },
+    target: { x: 0, y: 0, z: 0 },
+    zoom: 1,
+    enableOrbit: true,
+    enablePan: true,
+    enableZoom: true
+  });
   
   const [analysisData, setAnalysisData] = useState<AudioAnalysisData | null>(null);
 
@@ -133,6 +151,12 @@ const Visualizer: React.FC<VisualizerProps> = ({
         case VisualizationType.RECTANGULAR:
           drawRectangular(ctx, canvas, frequencyData, timeDomainData, averageFrequency, analysisData ? analysisData.instrumentPrediction : null);
           break;
+        case VisualizationType.HOLIDAY:
+          drawHoliday(ctx, canvas, frequencyData, timeDomainData, averageFrequency, analysisData ? analysisData.instrumentPrediction : null);
+          break;
+        case VisualizationType.HOLIDAY_3D:
+          drawHoliday3D(ctx, canvas, frequencyData, timeDomainData, averageFrequency, analysisData ? analysisData.instrumentPrediction : null);
+          break;
         default:
           drawSpectrum(ctx, canvas, frequencyData);
       }
@@ -159,6 +183,14 @@ const Visualizer: React.FC<VisualizerProps> = ({
       if (rectangularRef.current) {
         rectangularRef.current.destroy();
         rectangularRef.current = null;
+      }
+      if (holidayRef.current) {
+        holidayRef.current.destroy();
+        holidayRef.current = null;
+      }
+      if (holiday3DRef.current) {
+        holiday3DRef.current.destroy();
+        holiday3DRef.current = null;
       }
     };
   }, []);
@@ -418,6 +450,25 @@ const Visualizer: React.FC<VisualizerProps> = ({
       }
     }
     
+    // Apply visualization settings if available
+    if (visualizationSettings) {
+      // Apply general settings
+      rectangularRef.current.setReactivityLevel(visualizationSettings.reactivity);
+      
+      // Apply Rectangular specific settings
+      if (visualizationSettings.colorCycling !== undefined) {
+        rectangularRef.current.setColorCycling(visualizationSettings.colorCycling);
+      }
+      
+      if (visualizationSettings.colorCyclingSpeed !== undefined) {
+        rectangularRef.current.setColorCyclingSpeed(visualizationSettings.colorCyclingSpeed);
+      }
+      
+      if (visualizationSettings.rayCount !== undefined) {
+        rectangularRef.current.setRayCount(visualizationSettings.rayCount);
+      }
+    }
+    
     // Create a properly formed analysis data object
     const rectangularAnalysisData: AudioAnalysisData = {
       frequencyData,
@@ -431,6 +482,103 @@ const Visualizer: React.FC<VisualizerProps> = ({
     
     // Use the persistent rectangular visualization to draw
     rectangularRef.current.draw(rectangularAnalysisData);
+  };
+  
+  const drawHoliday = (
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    frequencyData: Uint8Array,
+    timeDomainData: Uint8Array,
+    averageFrequency: number,
+    instrumentPrediction: string | null
+  ) => {
+    // Create a persistent HolidayVisualization instance or reuse existing one
+    if (!holidayRef.current) {
+      holidayRef.current = new HolidayVisualization(canvas);
+    }
+    
+    // Create a properly formed analysis data object
+    const holidayAnalysisData: AudioAnalysisData = {
+      frequencyData,
+      waveformData: new Uint8Array(frequencyData.length), // Placeholder with correct size
+      timeDomainData,
+      averageFrequency,
+      peaks: analysisData?.peaks || [], // Use actual peaks if available
+      bpm: analysisData?.bpm || null,
+      instrumentPrediction
+    };
+    
+    // Use the persistent holiday visualization to draw
+    holidayRef.current.draw(holidayAnalysisData);
+  };
+  
+  const drawHoliday3D = (
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    frequencyData: Uint8Array,
+    timeDomainData: Uint8Array,
+    averageFrequency: number,
+    instrumentPrediction: string | null
+  ) => {
+    // Create a persistent Holiday3DVisualization instance or reuse existing one
+    if (!holiday3DRef.current) {
+      holiday3DRef.current = new Holiday3DVisualization(canvas);
+    }
+    
+    // Create a properly formed analysis data object
+    const holiday3DAnalysisData: AudioAnalysisData = {
+      frequencyData,
+      waveformData: new Uint8Array(frequencyData.length), // Placeholder with correct size
+      timeDomainData,
+      averageFrequency,
+      peaks: analysisData?.peaks || [], // Use actual peaks if available
+      bpm: analysisData?.bpm || null,
+      instrumentPrediction
+    };
+    
+    // Apply camera controls if they exist
+    if (holiday3DRef.current) {
+      const controlsToUse = cameraControls || localCameraControls;
+      // Set camera position and target
+      holiday3DRef.current.setCameraPosition(controlsToUse.position);
+      holiday3DRef.current.setCameraTarget(controlsToUse.target);
+      
+      // Set control enablement
+      holiday3DRef.current.setOrbitEnabled(controlsToUse.enableOrbit);
+      holiday3DRef.current.setPanEnabled(controlsToUse.enablePan);
+      holiday3DRef.current.setZoomEnabled(controlsToUse.enableZoom);
+    }
+    
+    // Apply visualization settings if available
+    if (visualizationSettings) {
+      // Apply general settings
+      holiday3DRef.current.setBrightness(visualizationSettings.brightness);
+      holiday3DRef.current.setReactivity(visualizationSettings.reactivity);
+      
+      // Apply Holiday3D specific settings
+      if (visualizationSettings.snowIntensity !== undefined) {
+        holiday3DRef.current.setSnowIntensity(visualizationSettings.snowIntensity);
+      }
+      
+      if (visualizationSettings.auroraIntensity !== undefined) {
+        holiday3DRef.current.setAuroraIntensity(visualizationSettings.auroraIntensity);
+      }
+      
+      if (visualizationSettings.treeLights !== undefined) {
+        holiday3DRef.current.setTreeLightsVisibility(visualizationSettings.treeLights);
+      }
+      
+      if (visualizationSettings.crystalVisibility !== undefined) {
+        holiday3DRef.current.setCrystalVisibility(visualizationSettings.crystalVisibility);
+      }
+      
+      if (visualizationSettings.colorTheme) {
+        holiday3DRef.current.setColorTheme(visualizationSettings.colorTheme);
+      }
+    }
+    
+    // Use the persistent 3D holiday visualization to draw
+    holiday3DRef.current.draw(holiday3DAnalysisData);
   };
 
   return (
